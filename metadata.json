@@ -1,0 +1,6 @@
+{
+  "name": "SolidFreeCAD",
+  "description": "SolidWorks-style mobile CAD modeler that exports fully functional .FCMacro scripts for FreeCAD.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

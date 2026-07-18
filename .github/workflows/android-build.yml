@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 jobs:
-  assemble-debug:
+  build-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -39,8 +39,8 @@ jobs:
         with:
           gradle-version: "9.3.1"
 
-      - name: Assemble debug APK
-        run: gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Build and run unit tests
+        run: gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4

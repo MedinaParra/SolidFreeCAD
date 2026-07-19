@@ -11,8 +11,8 @@ android {
     applicationId = "com.aistudio.solidmacro.fctech"
     minSdk = 24
     targetSdk = 36
-    versionCode = 4
-    versionName = "1.3-unified-native-core"
+    versionCode = 5
+    versionName = "1.4-parametric-touch"
 
     ndk {
       abiFilters += listOf("arm64-v8a")

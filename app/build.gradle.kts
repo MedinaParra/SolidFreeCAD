@@ -11,8 +11,12 @@ android {
     applicationId = "com.aistudio.solidmacro.fctech"
     minSdk = 24
     targetSdk = 36
-    versionCode = 3
-    versionName = "1.2-step-opengl"
+    versionCode = 4
+    versionName = "1.3-unified-native-core"
+
+    ndk {
+      abiFilters += listOf("arm64-v8a")
+    }
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -35,6 +39,10 @@ android {
   buildFeatures {
     compose = true
     buildConfig = true
+  }
+
+  packaging {
+    jniLibs.useLegacyPackaging = true
   }
 
   testOptions {

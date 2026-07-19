@@ -11,16 +11,16 @@ android {
     applicationId = "com.aistudio.solidmacro.fctech"
     minSdk = 24
     targetSdk = 36
-    versionCode = 9
-    versionName = "1.8-gpu-vsync-preview"
+    versionCode = 10
+    versionName = "1.9-freecad-base-0110-gpu"
 
     ndk {
       abiFilters += listOf("armeabi-v7a", "arm64-v8a")
     }
 
-    buildConfigField("String", "FREECAD_RUNTIME_VERSION", "\"0.9.1\"")
+    buildConfigField("String", "FREECAD_RUNTIME_VERSION", "\"0.11.0\"")
     buildConfigField("String", "FREECAD_SOURCE_VERSION", "\"1.1.1\"")
-    buildConfigField("String", "FREECAD_RUNTIME_COMMIT", "\"ac7cc2213aa26ed1526f522b5338b6a625fc9937\"")
+    buildConfigField("String", "FREECAD_RUNTIME_COMMIT", "\"1f70422ebaf60861971086709352d50716304625\"")
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

@@ -72,6 +72,16 @@ data class BasicCadProgram(
         return copy(features = features + feature, revision = revision + 1L)
     }
 
+    fun updateFeature(featureId: Long, parameters: Map<String, Double>): BasicCadProgram {
+        require(parameters.values.all { it.isFinite() }) { "Los parámetros deben ser finitos" }
+        return copy(
+            features = features.map { feature ->
+                if (feature.id == featureId) feature.copy(parameters = parameters) else feature
+            },
+            revision = revision + 1L
+        )
+    }
+
     fun remove(featureId: Long): BasicCadProgram = copy(
         features = features.filterNot { it.id == featureId },
         revision = revision + 1L

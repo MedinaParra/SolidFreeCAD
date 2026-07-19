@@ -11,10 +11,15 @@ permissions:
   actions: read
   contents: read
 
+env:
+  FREECAD_BASE_RUNTIME_RUN: 29695398108
+  FREECAD_BASE_RUNTIME_ARTIFACT: freecad-android-base-runtime-v091-apk
+  FREECAD_BASE_RUNTIME_COMMIT: ac7cc2213aa26ed1526f522b5338b6a625fc9937
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 55
 
     steps:
       - name: Checkout repository
@@ -40,35 +45,62 @@ jobs:
         with:
           gradle-version: "9.3.1"
 
-      - name: Download validated FreeCAD-Native 0.8 runtime
+      - name: Download validated FreeCAD Base runtime 0.9.1
         uses: actions/download-artifact@v4
         with:
-          name: freecad-android-app-core-apk
-          path: .deps/freecad-native
+          name: ${{ env.FREECAD_BASE_RUNTIME_ARTIFACT }}
+          path: .deps/freecad-base-runtime
           repository: MedinaParra/FreeCAD-Native
-          run-id: 29686924447
+          run-id: ${{ env.FREECAD_BASE_RUNTIME_RUN }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Package ARM64 OCCT and Python runtime
+      - name: Validate and package ARM32 plus ARM64 runtime
         shell: bash
         run: |
           set -euo pipefail
-          NATIVE_APK="$(find .deps/freecad-native -type f -name '*.apk' | head -n 1)"
-          test -n "${NATIVE_APK}"
-          rm -rf .build/native-runtime app/src/main/jniLibs/arm64-v8a app/src/main/assets/python-runtime
-          mkdir -p .build/native-runtime app/src/main/jniLibs/arm64-v8a app/src/main/assets/python-runtime
-          unzip -q "${NATIVE_APK}" \
+          BASE_APK="$(find .deps/freecad-base-runtime -type f -name '*.apk' | head -n 1)"
+          HASH_FILE="$(find .deps/freecad-base-runtime -type f -name '*.apk.sha256' | head -n 1)"
+          test -n "${BASE_APK}"
+          test -n "${HASH_FILE}"
+          (
+            cd "$(dirname "${BASE_APK}")"
+            sha256sum -c "$(basename "${HASH_FILE}")"
+          )
+
+          rm -rf .build/native-runtime app/src/main/jniLibs \
+            app/src/main/assets/python-runtime app/src/main/assets/licenses
+          mkdir -p .build/native-runtime app/src/main/jniLibs \
+            app/src/main/assets/python-runtime app/src/main/assets/licenses
+
+          unzip -q "${BASE_APK}" \
+            'lib/armeabi-v7a/*' \
             'lib/arm64-v8a/*' \
+            'assets/python-runtime/armeabi-v7a.zip' \
             'assets/python-runtime/arm64-v8a.zip' \
+            'assets/licenses/FreeCAD-LGPL-2.1.txt' \
             -d .build/native-runtime
-          cp .build/native-runtime/lib/arm64-v8a/*.so app/src/main/jniLibs/arm64-v8a/
-          cp .build/native-runtime/assets/python-runtime/arm64-v8a.zip \
-            app/src/main/assets/python-runtime/arm64-v8a.zip
-          test -f app/src/main/jniLibs/arm64-v8a/libfreecad_android_core.so
-          test -f app/src/main/jniLibs/arm64-v8a/libTKDESTEP.so
-          test -f app/src/main/jniLibs/arm64-v8a/libpython3.14.so
-          test -f app/src/main/assets/python-runtime/arm64-v8a.zip
-          echo "Packaged $(find app/src/main/jniLibs/arm64-v8a -type f -name '*.so' | wc -l) ARM64 libraries"
+
+          for ABI in armeabi-v7a arm64-v8a; do
+            mkdir -p "app/src/main/jniLibs/${ABI}"
+            cp .build/native-runtime/lib/${ABI}/*.so "app/src/main/jniLibs/${ABI}/"
+            cp ".build/native-runtime/assets/python-runtime/${ABI}.zip" \
+              "app/src/main/assets/python-runtime/${ABI}.zip"
+            test -f "app/src/main/jniLibs/${ABI}/libfreecad_android_core.so"
+            test -f "app/src/main/jniLibs/${ABI}/libTKDESTEP.so"
+            test -f "app/src/main/jniLibs/${ABI}/libpython3.14.so"
+            test -f "app/src/main/assets/python-runtime/${ABI}.zip"
+            nm -D --defined-only "app/src/main/jniLibs/${ABI}/libfreecad_android_core.so" \
+              | grep -q 'Java_com_medinaparra_freecadandroid_nativebridge_FreeCadBaseBridge_nativeSelfTest'
+            nm -D --defined-only "app/src/main/jniLibs/${ABI}/libfreecad_android_core.so" \
+              | grep -q 'Java_com_medinaparra_freecadandroid_nativebridge_NativeCadBridge_nativeRunMacro'
+            nm -D --defined-only "app/src/main/jniLibs/${ABI}/libfreecad_android_core.so" \
+              | grep -q 'Java_com_medinaparra_freecadandroid_nativebridge_NativeStepBridge_nativeImportStep'
+            echo "${ABI}: $(find "app/src/main/jniLibs/${ABI}" -type f -name '*.so' | wc -l) libraries"
+          done
+
+          cp .build/native-runtime/assets/licenses/FreeCAD-LGPL-2.1.txt \
+            app/src/main/assets/licenses/FreeCAD-LGPL-2.1.txt
+          test -s app/src/main/assets/licenses/FreeCAD-LGPL-2.1.txt
 
       - name: Build and run unit tests
         id: gradle-build
@@ -78,21 +110,20 @@ jobs:
           set -o pipefail
           gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest 2>&1 | tee build.log
 
-      - name: Verify self-contained APK
+      - name: Verify self-contained universal APK
         if: steps.gradle-build.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
           APK="app/build/outputs/apk/debug/app-debug.apk"
           unzip -l "${APK}" > apk-contents.txt
-          grep -q 'lib/arm64-v8a/libfreecad_android_core.so' apk-contents.txt
-          grep -q 'lib/arm64-v8a/libTKDESTEP.so' apk-contents.txt
-          grep -q 'lib/arm64-v8a/libpython3.14.so' apk-contents.txt
-          grep -q 'assets/python-runtime/arm64-v8a.zip' apk-contents.txt
-          if grep -q 'lib/armeabi-v7a/' apk-contents.txt; then
-            echo 'Unexpected 32-bit runtime found' >&2
-            exit 1
-          fi
+          for ABI in armeabi-v7a arm64-v8a; do
+            grep -q "lib/${ABI}/libfreecad_android_core.so" apk-contents.txt
+            grep -q "lib/${ABI}/libTKDESTEP.so" apk-contents.txt
+            grep -q "lib/${ABI}/libpython3.14.so" apk-contents.txt
+            grep -q "assets/python-runtime/${ABI}.zip" apk-contents.txt
+          done
+          grep -q 'assets/licenses/FreeCAD-LGPL-2.1.txt' apk-contents.txt
           sha256sum "${APK}" | tee app-debug.apk.sha256
 
       - name: Package complete source project
@@ -103,17 +134,19 @@ jobs:
           mkdir -p project-archive
           git archive --format=zip --prefix=SolidFreeCAD-source/ \
             --output="project-archive/SolidFreeCAD-source-${GITHUB_SHA}.zip" HEAD
-          cp "$(find .deps/freecad-native -type f -name '*.apk' | head -n 1)" \
-            project-archive/FreeCAD-Native-App-Core-0.8.apk
+          cp "$(find .deps/freecad-base-runtime -type f -name '*.apk' | head -n 1)" \
+            project-archive/FreeCAD-Android-Base-Runtime-v0.9.1.apk
           cp app/build/outputs/apk/debug/app-debug.apk \
-            project-archive/SolidFreeCAD-v1.4-parametric-touch.apk
+            project-archive/SolidFreeCAD-v1.5-freecad-base-111.apk
           cp build.log apk-contents.txt app-debug.apk.sha256 project-archive/
           cat > project-archive/README-BUNDLE.txt <<EOF
           SolidFreeCAD complete project bundle
           Branch: ${GITHUB_REF_NAME}
           Commit: ${GITHUB_SHA}
-          Includes source archive, validated FreeCAD-Native 0.8 runtime,
-          self-contained ARM64 APK, build log, APK inventory and SHA-256.
+          Base runtime commit: ${FREECAD_BASE_RUNTIME_COMMIT}
+          Includes source archive, FreeCAD 1.1.1 Base runtime 0.9.1,
+          ARM32/ARM64 universal APK, embedded CPython, OCCT STEP,
+          initial FCStd support, macro compatibility, build log and SHA-256.
           EOF
 
       - name: Upload build log

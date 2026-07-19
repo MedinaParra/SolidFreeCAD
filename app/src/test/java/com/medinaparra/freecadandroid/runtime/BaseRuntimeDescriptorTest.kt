@@ -25,10 +25,12 @@ class BaseRuntimeDescriptorTest {
 
     @Test
     fun exposesValidatedBaseContract() {
-        assertEquals("0.9.1", BaseRuntimeDescriptor.runtimeVersion)
+        assertEquals("0.11.0", BaseRuntimeDescriptor.runtimeVersion)
         assertEquals("1.1.1", BaseRuntimeDescriptor.freeCadVersion)
         assertEquals("python-runtime/arm64-v8a.zip", BaseRuntimeDescriptor.pythonAssetPath("arm64-v8a"))
         assertTrue("FreeCAD-style macros" in BaseRuntimeDescriptor.capabilities)
-        assertTrue("SolidFreeCAD parametric bridge" in BaseRuntimeDescriptor.capabilities)
+        assertTrue("FCStd object-aware import" in BaseRuntimeDescriptor.capabilities)
+        assertTrue("Non-destructive FCStd metadata export" in BaseRuntimeDescriptor.capabilities)
+        assertTrue("GPU synchronized face preview" in BaseRuntimeDescriptor.capabilities)
     }
 }

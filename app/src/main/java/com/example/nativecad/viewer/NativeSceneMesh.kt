@@ -14,6 +14,26 @@ data class NativeSceneMesh(
     val maxY: Float,
     val maxZ: Float
 ) {
+    constructor(
+        vertices: FloatArray,
+        indices: ShortArray,
+        minX: Float,
+        minY: Float,
+        minZ: Float,
+        maxX: Float,
+        maxY: Float,
+        maxZ: Float
+    ) : this(
+        vertices = vertices,
+        indices = IntArray(indices.size) { indices[it].toInt() and 0xFFFF },
+        minX = minX,
+        minY = minY,
+        minZ = minZ,
+        maxX = maxX,
+        maxY = maxY,
+        maxZ = maxZ
+    )
+
     val vertexCount: Int get() = vertices.size / 6
     val triangleCount: Int get() = indices.size / 3
     val maxDimension: Float get() = maxOf(maxX - minX, maxY - minY, maxZ - minZ).coerceAtLeast(1f)

@@ -11,8 +11,8 @@ android {
     applicationId = "com.aistudio.solidmacro.fctech"
     minSdk = 24
     targetSdk = 36
-    versionCode = 2
-    versionName = "1.1-native-preview"
+    versionCode = 3
+    versionName = "1.2-step-opengl"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

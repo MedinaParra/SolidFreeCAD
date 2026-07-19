@@ -11,8 +11,8 @@ android {
     applicationId = "com.aistudio.solidmacro.fctech"
     minSdk = 24
     targetSdk = 36
-    versionCode = 10
-    versionName = "1.9-freecad-base-0110-gpu"
+    versionCode = 11
+    versionName = "2.0-basic-cad-fcmacro"
 
     ndk {
       abiFilters += listOf("armeabi-v7a", "arm64-v8a")

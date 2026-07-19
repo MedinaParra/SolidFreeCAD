@@ -32,9 +32,9 @@ class NativeCadSurfaceView(context: Context) : GLSurfaceView(context) {
         renderMode = RENDERMODE_WHEN_DIRTY
     }
 
-    fun setMesh(mesh: NativeSceneMesh) {
+    fun setMesh(mesh: NativeSceneMesh, fitCamera: Boolean = true) {
         cadRenderer.setMesh(mesh)
-        cadRenderer.camera.fitTo(mesh)
+        if (fitCamera) cadRenderer.camera.fitTo(mesh)
         requestRender()
     }
 

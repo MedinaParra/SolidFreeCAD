@@ -40,11 +40,29 @@ jobs:
           gradle-version: "9.3.1"
 
       - name: Build and run unit tests
-        run: gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest
+        id: gradle-build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest 2>&1 | tee build.log
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SolidFreeCAD-build-log
+          path: build.log
+          if-no-files-found: error
 
       - name: Upload debug APK
+        if: steps.gradle-build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: SolidFreeCAD-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Propagate build failure
+        if: steps.gradle-build.outcome == 'failure'
+        run: exit 1

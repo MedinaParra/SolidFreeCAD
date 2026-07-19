@@ -107,17 +107,42 @@ object NativeCadBridge {
         angularDeflection: Double
     ): NativeMeshPayload
 
-    fun createStarterScene(): NativeCadScene {
+    fun createStarterScene(): NativeCadScene = createCylinderScene(
+        diameterMm = 34.93,
+        lengthMm = 40.0,
+        documentName = "SolidFreeCAD"
+    )
+
+    /**
+     * Rebuilds the same logical Sketch001 -> Extrusion001 feature from its parameters.
+     * The native 0.8 core currently exposes immutable feature creation through JNI, so
+     * this mobile layer creates a short-lived OCCT document and preserves semantic IDs
+     * in the Kotlin feature model.
+     */
+    fun createCylinderScene(
+        diameterMm: Double,
+        lengthMm: Double,
+        documentName: String = "SolidFreeCAD"
+    ): NativeCadScene {
+        require(diameterMm.isFinite() && diameterMm > 0.0) { "Diámetro no válido" }
+        require(lengthMm.isFinite() && lengthMm > 0.0) { "Longitud no válida" }
         check(isAvailable) { "El núcleo FreeCAD-Native 0.8 no está empaquetado en este APK" }
-        val documentId = nativeCreateDocument("SolidFreeCAD")
+
+        val documentId = nativeCreateDocument(documentName)
         check(documentId != 0L) { "El núcleo nativo no pudo crear el documento" }
         try {
-            nativeAddBox(documentId, "Pieza", 80.0, 50.0, 20.0)
+            val extrusionId = nativeAddCylinder(
+                documentId = documentId,
+                name = "Extrusion001",
+                radius = diameterMm * 0.5,
+                height = lengthMm
+            )
+            check(extrusionId != 0L) { "OCCT no pudo crear Extrusion001" }
             check(nativeRecompute(documentId)) {
                 nativeLastError(documentId).ifBlank { "Error de recomputación OCCT" }
             }
             return NativeCadScene(
-                mesh = nativeCreateSceneMesh(documentId, 0.35, 0.30).toSceneMesh(),
+                mesh = nativeCreateSceneMesh(documentId, 0.25, 0.24).toSceneMesh(),
                 buildInfo = nativeBuildInfo(),
                 documentSummary = nativeDocumentSummary(documentId)
             )

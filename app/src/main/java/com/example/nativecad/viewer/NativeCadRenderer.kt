@@ -93,6 +93,7 @@ class NativeCadRenderer : GLSurfaceView.Renderer {
         val lightLocation = GLES20.glGetUniformLocation(program, "uLightDirection")
         val positionLocation = GLES20.glGetAttribLocation(program, "aPosition")
         val normalLocation = GLES20.glGetAttribLocation(program, "aNormal")
+        if (positionLocation < 0 || normalLocation < 0) return
 
         GLES20.glUniformMatrix4fv(mvpLocation, 1, false, mvpMatrix, 0)
         GLES20.glUniform4f(colorLocation, 0.22f, 0.61f, 0.86f, 1f)
@@ -142,29 +143,37 @@ class NativeCadRenderer : GLSurfaceView.Renderer {
 
     private fun createProgram(vertexSource: String, fragmentSource: String): Int {
         val vertex = compileShader(GLES20.GL_VERTEX_SHADER, vertexSource)
+        if (vertex == 0) return 0
         val fragment = compileShader(GLES20.GL_FRAGMENT_SHADER, fragmentSource)
-        if (vertex == 0 || fragment == 0) return 0
-        return GLES20.glCreateProgram().also { result ->
-            GLES20.glAttachShader(result, vertex)
-            GLES20.glAttachShader(result, fragment)
-            GLES20.glLinkProgram(result)
-            val status = IntArray(1)
-            GLES20.glGetProgramiv(result, GLES20.GL_LINK_STATUS, status, 0)
-            if (status[0] == 0) {
-                Log.e("NativeCadRenderer", "Error enlazando shaders: ${GLES20.glGetProgramInfoLog(result)}")
-                GLES20.glDeleteProgram(result)
-            }
+        if (fragment == 0) {
+            GLES20.glDeleteShader(vertex)
+            return 0
+        }
+
+        val result = GLES20.glCreateProgram()
+        if (result == 0) {
             GLES20.glDeleteShader(vertex)
             GLES20.glDeleteShader(fragment)
-        }.takeIf { programId ->
-            val status = IntArray(1)
-            GLES20.glGetProgramiv(programId, GLES20.GL_LINK_STATUS, status, 0)
-            status[0] != 0
-        } ?: 0
+            return 0
+        }
+        GLES20.glAttachShader(result, vertex)
+        GLES20.glAttachShader(result, fragment)
+        GLES20.glLinkProgram(result)
+        val status = IntArray(1)
+        GLES20.glGetProgramiv(result, GLES20.GL_LINK_STATUS, status, 0)
+        GLES20.glDeleteShader(vertex)
+        GLES20.glDeleteShader(fragment)
+        if (status[0] == 0) {
+            Log.e("NativeCadRenderer", "Error enlazando shaders: ${GLES20.glGetProgramInfoLog(result)}")
+            GLES20.glDeleteProgram(result)
+            return 0
+        }
+        return result
     }
 
     private fun compileShader(type: Int, source: String): Int {
         val shader = GLES20.glCreateShader(type)
+        if (shader == 0) return 0
         GLES20.glShaderSource(shader, source)
         GLES20.glCompileShader(shader)
         val status = IntArray(1)

@@ -11,12 +11,16 @@ android {
     applicationId = "com.aistudio.solidmacro.fctech"
     minSdk = 24
     targetSdk = 36
-    versionCode = 5
-    versionName = "1.4-parametric-touch"
+    versionCode = 6
+    versionName = "1.5-freecad-base-111"
 
     ndk {
-      abiFilters += listOf("arm64-v8a")
+      abiFilters += listOf("armeabi-v7a", "arm64-v8a")
     }
+
+    buildConfigField("String", "FREECAD_RUNTIME_VERSION", "\"0.9.1\"")
+    buildConfigField("String", "FREECAD_SOURCE_VERSION", "\"1.1.1\"")
+    buildConfigField("String", "FREECAD_RUNTIME_COMMIT", "\"ac7cc2213aa26ed1526f522b5338b6a625fc9937\"")
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

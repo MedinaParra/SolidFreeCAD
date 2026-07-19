@@ -38,6 +38,11 @@ class NativeCadSurfaceView(context: Context) : GLSurfaceView(context) {
         requestRender()
     }
 
+    fun setSelectedPlane(plane: ReferencePlane?) {
+        cadRenderer.setSelectedPlane(plane)
+        requestRender()
+    }
+
     fun fit(mesh: NativeSceneMesh) {
         cadRenderer.camera.fitTo(mesh)
         requestRender()

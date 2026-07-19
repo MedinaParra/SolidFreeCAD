@@ -8,12 +8,13 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -39,6 +40,36 @@ jobs:
         with:
           gradle-version: "9.3.1"
 
+      - name: Download validated FreeCAD-Native 0.8 runtime
+        uses: actions/download-artifact@v4
+        with:
+          name: freecad-android-app-core-apk
+          path: .deps/freecad-native
+          repository: MedinaParra/FreeCAD-Native
+          run-id: 29686924447
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package ARM64 OCCT and Python runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          NATIVE_APK="$(find .deps/freecad-native -type f -name '*.apk' | head -n 1)"
+          test -n "${NATIVE_APK}"
+          rm -rf .build/native-runtime app/src/main/jniLibs/arm64-v8a app/src/main/assets/python-runtime
+          mkdir -p .build/native-runtime app/src/main/jniLibs/arm64-v8a app/src/main/assets/python-runtime
+          unzip -q "${NATIVE_APK}" \
+            'lib/arm64-v8a/*' \
+            'assets/python-runtime/arm64-v8a.zip' \
+            -d .build/native-runtime
+          cp .build/native-runtime/lib/arm64-v8a/*.so app/src/main/jniLibs/arm64-v8a/
+          cp .build/native-runtime/assets/python-runtime/arm64-v8a.zip \
+            app/src/main/assets/python-runtime/arm64-v8a.zip
+          test -f app/src/main/jniLibs/arm64-v8a/libfreecad_android_core.so
+          test -f app/src/main/jniLibs/arm64-v8a/libTKDESTEP.so
+          test -f app/src/main/jniLibs/arm64-v8a/libpython3.14.so
+          test -f app/src/main/assets/python-runtime/arm64-v8a.zip
+          echo "Packaged $(find app/src/main/jniLibs/arm64-v8a -type f -name '*.so' | wc -l) ARM64 libraries"
+
       - name: Build and run unit tests
         id: gradle-build
         continue-on-error: true
@@ -47,13 +78,33 @@ jobs:
           set -o pipefail
           gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest 2>&1 | tee build.log
 
+      - name: Verify self-contained APK
+        if: steps.gradle-build.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          unzip -l "${APK}" > apk-contents.txt
+          grep -q 'lib/arm64-v8a/libfreecad_android_core.so' apk-contents.txt
+          grep -q 'lib/arm64-v8a/libTKDESTEP.so' apk-contents.txt
+          grep -q 'lib/arm64-v8a/libpython3.14.so' apk-contents.txt
+          grep -q 'assets/python-runtime/arm64-v8a.zip' apk-contents.txt
+          if grep -q 'lib/armeabi-v7a/' apk-contents.txt; then
+            echo 'Unexpected 32-bit runtime found' >&2
+            exit 1
+          fi
+          sha256sum "${APK}" | tee app-debug.apk.sha256
+
       - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: SolidFreeCAD-build-log
-          path: build.log
-          if-no-files-found: error
+          path: |
+            build.log
+            apk-contents.txt
+            app-debug.apk.sha256
+          if-no-files-found: warn
 
       - name: Upload debug APK
         if: steps.gradle-build.outcome == 'success'

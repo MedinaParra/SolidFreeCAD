@@ -12,6 +12,9 @@ import kotlin.math.sqrt
 /**
  * One-finger tap selects a model face. Dragging the yellow 3D manipulator
  * edits the parameter behind that face. Orbit, pan and pinch remain available.
+ *
+ * While dragging, a lightweight mesh deformation follows the finger in real
+ * time. The native OpenCASCADE BRep is rebuilt only after the gesture ends.
  */
 class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
     val cadRenderer = FaceDrivenCadRenderer()
@@ -20,6 +23,7 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
     var onParameterPreview: ((EditableCadFace, Float) -> Unit)? = null
     var onParameterCommit: ((EditableCadFace, Float) -> Unit)? = null
 
+    private var committedMesh: NativeSceneMesh? = null
     private var currentLengthMm = 40f
     private var currentDiameterMm = 34.93f
     private var downX = 0f
@@ -34,6 +38,7 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
     private var parameterStartValue = 0f
     private var parameterPreviewValue = 0f
     private var movement = 0f
+    private var lastPreviewEventTime = Long.MIN_VALUE
 
     private val density = resources.displayMetrics.density
     private val scaleDetector = ScaleGestureDetector(
@@ -55,6 +60,7 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
     }
 
     fun setMesh(mesh: NativeSceneMesh, fitCamera: Boolean = true) {
+        committedMesh = mesh
         cadRenderer.setMesh(mesh)
         if (fitCamera) cadRenderer.camera.fitTo(mesh)
         requestRender()
@@ -80,6 +86,14 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
         requestRender()
     }
 
+    /** Restores the last committed BRep mesh after a cancelled gesture. */
+    fun restoreCommittedPreview() {
+        committedMesh?.let {
+            cadRenderer.setMesh(it)
+            requestRender()
+        }
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         scaleDetector.onTouchEvent(event)
         when (event.actionMasked) {
@@ -99,11 +113,15 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
                     EditableCadFace.NONE -> 0f
                 }
                 parameterPreviewValue = parameterStartValue
+                lastPreviewEventTime = Long.MIN_VALUE
+                if (parameterDrag) renderMode = RENDERMODE_CONTINUOUSLY
             }
 
             MotionEvent.ACTION_POINTER_DOWN -> {
                 multiTouch = true
+                if (parameterDrag) restoreCommittedPreview()
                 parameterDrag = false
+                renderMode = RENDERMODE_WHEN_DIRTY
                 val centroid = centroid(event)
                 lastCentroidX = centroid.first
                 lastCentroidY = centroid.second
@@ -141,6 +159,7 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
                         EditableCadFace.SIDE -> (parameterStartValue + worldDelta * 2f).coerceIn(1f, 5000f)
                         EditableCadFace.NONE -> parameterStartValue
                     }
+                    updateLivePreview(event.eventTime, force = false)
                     onParameterPreview?.invoke(parameterDragFace, parameterPreviewValue)
                     movement = maxOf(movement, sqrt(totalDx * totalDx + totalDy * totalDy))
                 } else if (!multiTouch && !scaleDetector.isInProgress) {
@@ -165,6 +184,7 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
             MotionEvent.ACTION_UP -> {
                 when {
                     parameterDrag -> {
+                        updateLivePreview(event.eventTime, force = true)
                         onParameterCommit?.invoke(parameterDragFace, parameterPreviewValue)
                     }
                     !multiTouch && distance(downX, downY, event.x, event.y) < 13f * density -> {
@@ -176,12 +196,16 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
                 parameterDrag = false
                 parameterDragFace = EditableCadFace.NONE
                 multiTouch = false
+                renderMode = RENDERMODE_WHEN_DIRTY
+                requestRender()
             }
 
             MotionEvent.ACTION_CANCEL -> {
+                if (parameterDrag) restoreCommittedPreview()
                 parameterDrag = false
                 parameterDragFace = EditableCadFace.NONE
                 multiTouch = false
+                renderMode = RENDERMODE_WHEN_DIRTY
             }
         }
         return true
@@ -190,6 +214,26 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
     override fun onDetachedFromWindow() {
         queueEvent { cadRenderer.release() }
         super.onDetachedFromWindow()
+    }
+
+    private fun updateLivePreview(eventTime: Long, force: Boolean) {
+        if (!force && eventTime - lastPreviewEventTime < PREVIEW_FRAME_INTERVAL_MS) return
+        val source = committedMesh ?: return
+        val targetLength = when (parameterDragFace) {
+            EditableCadFace.TOP -> parameterPreviewValue
+            else -> currentLengthMm
+        }
+        val targetDiameter = when (parameterDragFace) {
+            EditableCadFace.SIDE -> parameterPreviewValue
+            else -> currentDiameterMm
+        }
+        runCatching {
+            LiveParametricPreview.deformCylinder(source, targetLength, targetDiameter)
+        }.onSuccess {
+            cadRenderer.setMesh(it)
+            requestRender()
+            lastPreviewEventTime = eventTime
+        }
     }
 
     private fun centroid(event: MotionEvent): Pair<Float, Float> {
@@ -206,5 +250,9 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
         val dx = bx - ax
         val dy = by - ay
         return sqrt(dx * dx + dy * dy)
+    }
+
+    private companion object {
+        const val PREVIEW_FRAME_INTERVAL_MS = 8L
     }
 }

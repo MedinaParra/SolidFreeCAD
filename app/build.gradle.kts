@@ -11,8 +11,8 @@ android {
     applicationId = "com.aistudio.solidmacro.fctech"
     minSdk = 24
     targetSdk = 36
-    versionCode = 7
-    versionName = "1.6-face-driven-workspace"
+    versionCode = 8
+    versionName = "1.7-live-face-animation"
 
     ndk {
       abiFilters += listOf("armeabi-v7a", "arm64-v8a")

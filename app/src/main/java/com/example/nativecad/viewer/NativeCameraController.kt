@@ -5,6 +5,7 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
 
+/** Orbital CAD camera using the same Z-up convention as OpenCASCADE and FreeCAD. */
 class NativeCameraController {
     var yaw = 45f
         private set
@@ -34,21 +35,18 @@ class NativeCameraController {
         val denominator = max(1, minOf(viewportWidth, viewportHeight)).toFloat()
         val worldPerPixel = radius * 1.35f / denominator
         val yawRadians = Math.toRadians(yaw.toDouble())
-        val rightX = cos(yawRadians).toFloat()
-        val rightZ = -sin(yawRadians).toFloat()
+        val rightX = -sin(yawRadians).toFloat()
+        val rightY = cos(yawRadians).toFloat()
         targetX -= dx * worldPerPixel * rightX
-        targetZ -= dx * worldPerPixel * rightZ
-        targetY += dy * worldPerPixel
+        targetY -= dx * worldPerPixel * rightY
+        targetZ += dy * worldPerPixel
     }
 
     fun fitTo(mesh: NativeSceneMesh) {
         targetX = (mesh.minX + mesh.maxX) * 0.5f
         targetY = (mesh.minY + mesh.maxY) * 0.5f
         targetZ = (mesh.minZ + mesh.maxZ) * 0.5f
-        val dx = mesh.maxX - mesh.minX
-        val dy = mesh.maxY - mesh.minY
-        val dz = mesh.maxZ - mesh.minZ
-        modelSize = max(maxOf(dx, dy, dz), 0.001f)
+        modelSize = mesh.maxDimension
         radius = max(modelSize * 2.1f, 1f)
         yaw = 45f
         pitch = 28f
@@ -57,8 +55,8 @@ class NativeCameraController {
     fun setPreset(preset: CameraPreset) {
         when (preset) {
             CameraPreset.ISOMETRIC -> { yaw = 45f; pitch = 28f }
-            CameraPreset.FRONT -> { yaw = 0f; pitch = 0f }
-            CameraPreset.RIGHT -> { yaw = 90f; pitch = 0f }
+            CameraPreset.FRONT -> { yaw = -90f; pitch = 0f }
+            CameraPreset.RIGHT -> { yaw = 0f; pitch = 0f }
             CameraPreset.TOP -> { yaw = 0f; pitch = 82f }
         }
     }
@@ -66,15 +64,19 @@ class NativeCameraController {
     fun viewMatrix(output: FloatArray) {
         val yawRadians = Math.toRadians(yaw.toDouble())
         val pitchRadians = Math.toRadians(pitch.toDouble())
-        val cosPitch = cos(pitchRadians)
-        val cameraX = targetX + radius * cosPitch.toFloat() * sin(yawRadians).toFloat()
-        val cameraY = targetY + radius * sin(pitchRadians).toFloat()
-        val cameraZ = targetZ + radius * cosPitch.toFloat() * cos(yawRadians).toFloat()
+        val cosPitch = cos(pitchRadians).toFloat()
+        val cameraX = targetX + radius * cosPitch * cos(yawRadians).toFloat()
+        val cameraY = targetY + radius * cosPitch * sin(yawRadians).toFloat()
+        val cameraZ = targetZ + radius * sin(pitchRadians).toFloat()
+
+        // Near top view the conventional Z-up vector becomes parallel to the view;
+        // use a stable Y-up fallback for that narrow range.
+        val nearTop = kotlin.math.abs(pitch) > 78f
         Matrix.setLookAtM(
             output, 0,
             cameraX, cameraY, cameraZ,
             targetX, targetY, targetZ,
-            0f, 1f, 0f
+            0f, if (nearTop) 1f else 0f, if (nearTop) 0f else 1f
         )
     }
 

@@ -1,0 +1,192 @@
++                    Modifier.padding(horizontal = 7.dp, vertical = 4.dp),
++                    color = Color.White,
++                    fontWeight = FontWeight.Black
++                )
++            }
++            Spacer(Modifier.width(7.dp))
++            Column(Modifier.widthIn(max = 170.dp)) {
++                Text("SolidFreeCAD", color = V23Text, fontWeight = FontWeight.Bold, fontSize = 13.sp)
++                Text(
++                    documentName,
++                    color = V23Secondary,
++                    fontSize = 8.sp,
++                    maxLines = 1,
++                    overflow = TextOverflow.Ellipsis
++                )
++            }
++            Row(
++                Modifier
++                    .weight(1f)
++                    .horizontalScroll(rememberScrollState()),
++                verticalAlignment = Alignment.CenterVertically
++            ) {
++                V23ToolbarAction("Nuevo", Icons.Default.Add, !loading, onNew)
++                V23ToolbarAction("Abrir", Icons.Default.FolderOpen, !loading, onOpen)
++                V23ToolbarAction("Deshacer", Icons.Default.Undo, canUndo, onUndo)
++                V23ToolbarAction("Rehacer", Icons.Default.Redo, canRedo, onRedo)
++                V23ToolbarAction(
++                    if (drawerVisible) "Ocultar herramientas" else "Herramientas",
++                    if (drawerVisible) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
++                    !loading,
++                    onTools
++                )
++                V23ToolbarAction("Encuadrar", Icons.Default.FilterCenterFocus, true, onFit)
++                V23TextAction("ISO", true) { onPreset(CameraPreset.ISOMETRIC) }
++                V23TextAction("Frente", true) { onPreset(CameraPreset.FRONT) }
++                V23TextAction("Planta", true) { onPreset(CameraPreset.TOP) }
++            }
++            IconButton(onClick = onToggleTree, enabled = !loading, modifier = Modifier.size(44.dp)) {
++                Icon(
++                    if (treeVisible) Icons.Default.KeyboardArrowLeft else Icons.Default.KeyboardArrowRight,
++                    "Árbol",
++                    tint = if (loading) V23Muted else V23Accent
++                )
++            }
++            IconButton(onClick = onToggleRight, enabled = !loading, modifier = Modifier.size(44.dp)) {
++                Icon(
++                    if (rightVisible) Icons.Default.KeyboardArrowRight else Icons.Default.KeyboardArrowLeft,
++                    "Propiedades",
++                    tint = if (loading) V23Muted else V23Accent
++                )
++            }
++        }
++    }
++}
++
++@Composable
++private fun V23ToolbarAction(
++    label: String,
++    icon: ImageVector,
++    enabled: Boolean,
++    onClick: () -> Unit
++) {
++    Column(
++        modifier = Modifier
++            .width(76.dp)
++            .defaultMinSize(minHeight = 48.dp)
++            .clickable(enabled = enabled, onClick = onClick)
++            .padding(vertical = 4.dp),
++        horizontalAlignment = Alignment.CenterHorizontally,
++        verticalArrangement = Arrangement.Center
++    ) {
++        Icon(
++            icon,
++            null,
++            modifier = Modifier.size(18.dp),
++            tint = if (enabled) V23Accent else Color(0xFF94A3B8)
++        )
++        Text(
++            label,
++            color = if (enabled) V23Accent else Color(0xFF94A3B8),
++            fontSize = 7.sp,
++            fontWeight = FontWeight.Bold,
++            maxLines = 1,
++            overflow = TextOverflow.Ellipsis
++        )
++    }
++}
++
++@Composable
++private fun V23TextAction(label: String, enabled: Boolean, onClick: () -> Unit) {
++    Surface(
++        modifier = Modifier
++            .padding(horizontal = 2.dp)
++            .defaultMinSize(minWidth = 48.dp, minHeight = 38.dp)
++            .clickable(enabled = enabled, onClick = onClick),
++        color = Color(0xFFE3EDF3),
++        contentColor = V23Accent,
++        shape = RoundedCornerShape(5.dp)
++    ) {
++        Box(contentAlignment = Alignment.Center) {
++            Text(label, color = V23Accent, fontSize = 8.sp, fontWeight = FontWeight.Bold)
++        }
++    }
++}
++
++@Composable
++private fun V23StatusBar(
++    status: String,
++    loading: Boolean,
++    format: String,
++    featureCount: Int?,
++    sketchCount: Int?,
++    planeCount: Int?
++) {
++    Surface(color = Color(0xFFE9EEF2), contentColor = V23Text, shadowElevation = 2.dp) {
++        Row(
++            Modifier
++                .fillMaxWidth()
++                .navigationBarsPadding()
++                .padding(horizontal = 10.dp, vertical = 5.dp),
++            verticalAlignment = Alignment.CenterVertically
++        ) {
++            Text(
++                status,
++                Modifier.weight(1f),
++                color = V23Text,
++                fontSize = 9.sp,
++                fontWeight = FontWeight.Medium,
++                maxLines = 1,
++                overflow = TextOverflow.Ellipsis
++            )
++            if (loading) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
++            Spacer(Modifier.width(8.dp))
++            featureCount?.let { Text("$it op.", color = V23Secondary, fontSize = 8.sp, fontWeight = FontWeight.Bold) }
++            sketchCount?.let { Spacer(Modifier.width(7.dp)); Text("$it croq.", color = V23Secondary, fontSize = 8.sp) }
++            planeCount?.let { Spacer(Modifier.width(7.dp)); Text("$it planos", color = V23Secondary, fontSize = 8.sp) }
++            Spacer(Modifier.width(8.dp))
++            Text(format, color = V23Secondary, fontSize = 8.sp, fontWeight = FontWeight.Bold)
++        }
++    }
++}
++
++@Composable
++private fun V23Tree(
++    document: V23Document?,
++    selection: V23Selection,
++    enabled: Boolean,
++    onSelect: (V23Selection) -> Unit,
++    onOpenDrawer: (V23DrawerTab) -> Unit,
++    onClose: () -> Unit,
++    modifier: Modifier
++) {
++    Surface(modifier.fillMaxHeight(), color = V23Panel, contentColor = V23Text) {
++        Column {
++            Row(
++                Modifier
++                    .fillMaxWidth()
++                    .background(V23Header)
++                    .padding(horizontal = 6.dp, vertical = 4.dp),
++                verticalAlignment = Alignment.CenterVertically
++            ) {
++                Text("FeatureManager", Modifier.weight(1f), color = V23Text, fontSize = 10.sp, fontWeight = FontWeight.Bold)
++                IconButton(
++                    onClick = { onOpenDrawer(V23DrawerTab.CROQUIS) },
++                    enabled = enabled,
++                    modifier = Modifier.size(34.dp)
++                ) { Icon(Icons.Default.Add, "Añadir", tint = if (enabled) V23Accent else V23Muted) }
++                IconButton(onClick = onClose, modifier = Modifier.size(34.dp)) {
++                    Icon(Icons.Default.KeyboardArrowLeft, "Ocultar", tint = V23Accent)
++                }
++            }
++            HorizontalDivider(color = V23Divider)
++            Column(
++                Modifier
++                    .fillMaxSize()
++                    .verticalScroll(rememberScrollState())
++                    .padding(8.dp)
++            ) {
++                Text(
++                    document?.name ?: "Sin documento",
++                    color = V23Text,
++                    fontSize = 10.sp,
++                    fontWeight = FontWeight.Bold,
++                    maxLines = 1,
++                    overflow = TextOverflow.Ellipsis
++                )
++                val program = document?.program
++                if (program == null) {
++                    V23TreeRow(
++                        label = document?.format ?: "Geometría importada",
++                        prefix = "◆",
++                        selected = selection.kind == V23NodeKind.IMPORTED,

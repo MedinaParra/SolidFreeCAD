@@ -19,12 +19,14 @@ class BasicCadHistoryTest {
         assertFalse(committed.canRedo)
         assertEquals(third, committed.current)
 
-        val undone = assertNotNull(committed.undo()) as BasicCadHistory
-        assertEquals(second, undone.current)
+        val undone = committed.undo()
+        assertNotNull(undone)
+        assertEquals(second, undone!!.current)
         assertTrue(undone.canRedo)
 
-        val redone = assertNotNull(undone.redo()) as BasicCadHistory
-        assertEquals(third, redone.current)
+        val redone = undone.redo()
+        assertNotNull(redone)
+        assertEquals(third, redone!!.current)
         assertFalse(redone.canRedo)
     }
 
@@ -46,7 +48,9 @@ class BasicCadHistoryTest {
     @Test
     fun historyIsBounded() {
         var history = BasicCadHistory(BasicCadProgram(), maxDepth = 3)
-        repeat(6) { history = history.commit(history.current.append(BasicCadOperation.SIMPLE_HOLE)) }
+        repeat(6) {
+            history = history.commit(history.current.append(BasicCadOperation.SIMPLE_HOLE))
+        }
         assertEquals(3, history.undoStack.size)
     }
 }

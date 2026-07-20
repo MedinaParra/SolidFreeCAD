@@ -197,11 +197,13 @@ data class CadSketch(
         return hypot((p["x2"] ?: 0.0) - (p["x1"] ?: 0.0), (p["y2"] ?: 0.0) - (p["y1"] ?: 0.0))
     }
 
-    private fun radiusLike(primitive: CadSketchPrimitive): Double? = when (primitive.kind) {
-        CadSketchPrimitiveKind.CIRCLE -> (primitive.parameters["diameter"] ?: return null) / 2.0
-        CadSketchPrimitiveKind.ARC,
-        CadSketchPrimitiveKind.POLYGON -> primitive.parameters["radius"]
-        else -> null
+    private fun radiusLike(primitive: CadSketchPrimitive): Double? {
+        return when (primitive.kind) {
+            CadSketchPrimitiveKind.CIRCLE -> primitive.parameters["diameter"]?.div(2.0)
+            CadSketchPrimitiveKind.ARC,
+            CadSketchPrimitiveKind.POLYGON -> primitive.parameters["radius"]
+            else -> null
+        }
     }
 
     private fun setRadiusLike(primitive: CadSketchPrimitive, radius: Double): CadSketchPrimitive = when (primitive.kind) {

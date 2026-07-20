@@ -11,8 +11,8 @@ android {
     applicationId = "com.aistudio.solidmacro.fctech"
     minSdk = 24
     targetSdk = 36
-    versionCode = 11
-    versionName = "2.0-basic-cad-fcmacro"
+    versionCode = 12
+    versionName = "2.1-animated-dual-panels"
 
     ndk {
       abiFilters += listOf("armeabi-v7a", "arm64-v8a")

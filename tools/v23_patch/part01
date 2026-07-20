@@ -1,0 +1,428 @@
++    val fit: Boolean
++)
++
++private data class V23ParameterValidation(
++    val values: Map<String, Double> = emptyMap(),
++    val error: String? = null
++)
++
++class SolidFreeCadWorkbenchActivityV23 : ComponentActivity() {
++    private var cadSurface: FaceDrivenCadSurfaceView? = null
++
++    override fun onCreate(savedInstanceState: Bundle?) {
++        super.onCreate(savedInstanceState)
++        enableEdgeToEdge()
++        val initialUri = intent?.data
++        setContent {
++            MyApplicationTheme {
++                V23Workbench(initialUri) { cadSurface = it }
++            }
++        }
++    }
++
++    override fun onPause() {
++        cadSurface?.onPause()
++        super.onPause()
++    }
++
++    override fun onResume() {
++        super.onResume()
++        cadSurface?.onResume()
++    }
++}
++
++@Composable
++private fun V23Workbench(
++    initialUri: Uri?,
++    onSurfaceReady: (FaceDrivenCadSurfaceView) -> Unit
++) {
++    val context = LocalContext.current
++    val scope = rememberCoroutineScope()
++    val compactScreen = LocalConfiguration.current.screenWidthDp < 850
++    val preferences = remember {
++        context.getSharedPreferences(V23Preferences, Context.MODE_PRIVATE)
++    }
++
++    var history by remember { mutableStateOf(BasicCadHistory(BasicCadProgram())) }
++    var document by remember { mutableStateOf<V23Document?>(null) }
++    var selection by rememberSaveable { mutableStateOf(V23Selection(V23NodeKind.FEATURE, 1L)) }
++    var selectedFace by remember { mutableStateOf(EditableCadFace.NONE) }
++    var treeVisible by rememberSaveable {
++        mutableStateOf(preferences.getBoolean("tree_visible", true))
++    }
++    var rightVisible by rememberSaveable {
++        mutableStateOf(preferences.getBoolean("right_visible", true))
++    }
++    var drawerVisible by rememberSaveable {
++        mutableStateOf(preferences.getBoolean("drawer_visible", true))
++    }
++    var drawerTab by rememberSaveable {
++        mutableStateOf(
++            runCatching {
++                V23DrawerTab.valueOf(
++                    preferences.getString("drawer_tab", V23DrawerTab.CROQUIS.name)
++                        ?: V23DrawerTab.CROQUIS.name
++                )
++            }.getOrDefault(V23DrawerTab.CROQUIS)
++        )
++    }
++    var editingSketchId by remember { mutableStateOf<Long?>(null) }
++    var referenceFacePickMode by remember { mutableStateOf(false) }
++    var surface by remember { mutableStateOf<FaceDrivenCadSurfaceView?>(null) }
++    var loading by remember { mutableStateOf(false) }
++    var status by remember { mutableStateOf("Preparando FreeCAD…") }
++    var error by remember { mutableStateOf<String?>(null) }
++
++    LaunchedEffect(treeVisible, rightVisible, drawerVisible, drawerTab) {
++        preferences.edit()
++            .putBoolean("tree_visible", treeVisible)
++            .putBoolean("right_visible", rightVisible)
++            .putBoolean("drawer_visible", drawerVisible)
++            .putString("drawer_tab", drawerTab.name)
++            .apply()
++    }
++
++    fun rebuildCandidate(
++        candidate: BasicCadHistory,
++        fit: Boolean,
++        message: String,
++        nextSelection: V23Selection? = null,
++        afterSuccess: (() -> Unit)? = null
++    ) {
++        if (loading) return
++        loading = true
++        error = null
++        selectedFace = EditableCadFace.NONE
++        surface?.setSelectedFace(EditableCadFace.NONE)
++        scope.launch {
++            runCatching { v23BuildProgram(context, candidate.current, fit) }
++                .onSuccess {
++                    history = candidate
++                    document = it
++                    selection = nextSelection
++                        ?: V23Selection(V23NodeKind.FEATURE, candidate.current.features.lastOrNull()?.id)
++                    status = message
++                    afterSuccess?.invoke()
++                }
++                .onFailure {
++                    error = v23Failure(it)
++                    status = "No se pudo reconstruir el modelo"
++                    surface?.restoreCommittedPreview()
++                }
++            loading = false
++        }
++    }
++
++    fun commitProgram(
++        next: BasicCadProgram,
++        fit: Boolean,
++        message: String,
++        nextSelection: V23Selection? = null,
++        afterSuccess: (() -> Unit)? = null
++    ) {
++        if (next == history.current) {
++            status = "No hay cambios para aplicar"
++            return
++        }
++        rebuildCandidate(history.commit(next), fit, message, nextSelection, afterSuccess)
++    }
++
++    fun createDocument() {
++        editingSketchId = null
++        referenceFacePickMode = false
++        rebuildCandidate(
++            history.reset(BasicCadProgram()),
++            true,
++            "Pieza paramétrica creada",
++            V23Selection(V23NodeKind.FEATURE, 1L)
++        )
++    }
++
++    fun openUri(uri: Uri) {
++        if (loading) return
++        runCatching {
++            context.contentResolver.takePersistableUriPermission(
++                uri,
++                Intent.FLAG_GRANT_READ_URI_PERMISSION
++            )
++        }
++        loading = true
++        error = null
++        status = "Abriendo documento…"
++        selectedFace = EditableCadFace.NONE
++        editingSketchId = null
++        referenceFacePickMode = false
++        surface?.setSelectedFace(EditableCadFace.NONE)
++        scope.launch {
++            runCatching { v23LoadExternal(context, uri) }
++                .onSuccess {
++                    document = it
++                    it.program?.let { loaded -> history = history.reset(loaded) }
++                    selection = if (it.program == null) {
++                        V23Selection(V23NodeKind.IMPORTED)
++                    } else {
++                        V23Selection(V23NodeKind.FEATURE, it.program.features.lastOrNull()?.id)
++                    }
++                    status = "${it.format} cargado"
++                }
++                .onFailure {
++                    error = v23Failure(it)
++                    status = "Error al abrir el archivo"
++                }
++            loading = false
++        }
++    }
++
++    val openDocument = rememberLauncherForActivityResult(
++        ActivityResultContracts.OpenDocument()
++    ) { uri -> uri?.let(::openUri) }
++
++    LaunchedEffect(initialUri) {
++        if (initialUri != null) openUri(initialUri) else createDocument()
++    }
++
++    val activeProgram = document?.program
++    val selectedFeature = if (selection.kind == V23NodeKind.FEATURE) {
++        activeProgram?.features?.firstOrNull { it.id == selection.id }
++    } else null
++    val selectedSketch = if (selection.kind == V23NodeKind.SKETCH) {
++        activeProgram?.sketches?.firstOrNull { it.id == selection.id }
++    } else null
++    val selectedPlane = if (selection.kind == V23NodeKind.PLANE) {
++        activeProgram?.planes?.firstOrNull { it.id == selection.id }
++    } else null
++    val activeSketch = activeProgram?.activeSketch()
++    val baseFeature = activeProgram?.features?.firstOrNull()
++    val baseSketch = activeProgram?.sketch(baseFeature?.sketchId)
++    val directCylinder = activeProgram?.features?.size == 1 &&
++        baseFeature?.operation == BasicCadOperation.BOSS_EXTRUDE &&
++        baseSketch?.profileType == CadSketchProfileType.CIRCLE &&
++        baseFeature.planeId == CadReferencePlane.XY_ID &&
++        editingSketchId == null && !referenceFacePickMode
++    val undoEnabled = !loading && activeProgram != null && history.canUndo
++    val redoEnabled = !loading && activeProgram != null && history.canRedo
++
++    fun openDrawer(tab: V23DrawerTab) {
++        drawerTab = tab
++        drawerVisible = true
++    }
++
++    fun selectPlane(planeId: Long) {
++        val program = activeProgram ?: return
++        val next = program.setActivePlane(planeId)
++        commitProgram(next, false, "${next.plane(planeId)?.label ?: "Plano"} activo", V23Selection(V23NodeKind.PLANE, planeId))
++    }
++
++    fun createSketch(profileType: CadSketchProfileType) {
++        val program = activeProgram
++        if (program == null) {
++            error = "Cree una pieza paramétrica nueva antes de añadir croquis"
++            return
++        }
++        val next = program.addSketch(profileType, program.activePlaneId)
++        val id = next.activeSketchId ?: return
++        commitProgram(
++            next,
++            false,
++            "${next.sketch(id)?.label ?: "Croquis"} creado",
++            V23Selection(V23NodeKind.SKETCH, id)
++        ) { editingSketchId = id }
++    }
++
++    fun addOperation(operation: BasicCadOperation) {
++        val program = activeProgram
++        if (program == null) {
++            error = "Las operaciones requieren una pieza paramétrica. Use Nuevo para comenzar."
++            return
++        }
++        val sketch = program.activeSketch()
++        if (operation.requiresClosedSketch() && (sketch == null || !sketch.profileType.closed)) {
++            error = "${operation.label} requiere un croquis cerrado seleccionado"
++            drawerTab = V23DrawerTab.CROQUIS
++            drawerVisible = true
++            return
++        }
++        val next = program.append(operation, sketch?.id)
++        val feature = next.features.last()
++        commitProgram(
++            next,
++            false,
++            "${feature.label} añadido",
++            V23Selection(V23NodeKind.FEATURE, feature.id)
++        )
++    }
++
++    fun createOffsetPlane() {
++        val program = activeProgram ?: run {
++            error = "Cree una pieza paramétrica antes de añadir planos"
++            return
++        }
++        val sourceId = when (selection.kind) {
++            V23NodeKind.PLANE -> selection.id ?: program.activePlaneId
++            else -> program.activePlaneId
++        }
++        val next = program.addOffsetPlane(sourceId, 10.0)
++        val planeId = next.activePlaneId
++        commitProgram(next, false, "Plano paralelo creado a 10 mm", V23Selection(V23NodeKind.PLANE, planeId))
++    }
++
++    fun startFacePlanePick() {
++        if (activeProgram == null) {
++            error = "Cree una pieza paramétrica antes de capturar una cara"
++            return
++        }
++        drawerVisible = false
++        referenceFacePickMode = true
++        selectedFace = EditableCadFace.NONE
++        surface?.setSelectedFace(EditableCadFace.NONE)
++        surface?.setReferenceFacePickMode(true)
++        status = "Toque una cara: se creará un plano paralelo; en superficies curvas será tangente local"
++    }
++
++    Scaffold(
++        topBar = {
++            V23TopBar(
++                documentName = document?.name ?: "Sin título",
++                loading = loading,
++                treeVisible = treeVisible,
++                rightVisible = rightVisible,
++                drawerVisible = drawerVisible,
++                canUndo = undoEnabled,
++                canRedo = redoEnabled,
++                onNew = ::createDocument,
++                onOpen = { openDocument.launch(arrayOf("*/*")) },
++                onUndo = { history.undo()?.let { rebuildCandidate(it, false, "Operación deshecha") } },
++                onRedo = { history.redo()?.let { rebuildCandidate(it, false, "Operación rehecha") } },
++                onTools = { drawerVisible = !drawerVisible },
++                onFit = { document?.mesh?.let { surface?.fit(it) } },
++                onPreset = { preset -> surface?.setPreset(preset) },
++                onToggleTree = { treeVisible = !treeVisible },
++                onToggleRight = { rightVisible = !rightVisible }
++            )
++        },
++        bottomBar = {
++            V23StatusBar(
++                status = status,
++                loading = loading,
++                format = document?.format ?: "—",
++                featureCount = activeProgram?.features?.size,
++                sketchCount = activeProgram?.sketches?.size,
++                planeCount = activeProgram?.planes?.size
++            )
++        }
++    ) { padding ->
++        BoxWithConstraints(
++            Modifier
++                .fillMaxSize()
++                .padding(padding)
++                .background(V23Viewport)
++        ) {
++            val compact = maxWidth < 850.dp
++            Row(Modifier.fillMaxSize()) {
++                AnimatedVisibility(
++                    visible = treeVisible,
++                    enter = expandHorizontally(Alignment.Start, v23Tween()) +
++                        slideInHorizontally(initialOffsetX = { -it }, animationSpec = v23Tween()) +
++                        fadeIn(tween(140)),
++                    exit = shrinkHorizontally(Alignment.Start, v23Tween()) +
++                        slideOutHorizontally(targetOffsetX = { -it }, animationSpec = v23Tween()) +
++                        fadeOut(tween(130))
++                ) {
++                    Row {
++                        V23Tree(
++                            document = document,
++                            selection = selection,
++                            enabled = !loading,
++                            onSelect = { node ->
++                                selection = node
++                                if (node.kind == V23NodeKind.PLANE) {
++                                    node.id?.let { id ->
++                                        activeProgram?.plane(id)?.principal?.let { principal ->
++                                            surface?.setPreset(
++                                                when (principal) {
++                                                    com.example.features.CadPrincipalPlane.XY -> CameraPreset.TOP
++                                                    com.example.features.CadPrincipalPlane.XZ -> CameraPreset.FRONT
++                                                    com.example.features.CadPrincipalPlane.YZ -> CameraPreset.RIGHT
++                                                }
++                                            )
++                                        }
++                                    }
++                                }
++                                if (!compact) rightVisible = true
++                            },
++                            onOpenDrawer = { openDrawer(it) },
++                            onClose = { treeVisible = false },
++                            modifier = Modifier.width(if (compact) 220.dp else 242.dp)
++                        )
++                        VerticalDivider(color = V23Divider)
++                    }
++                }
++
++                Box(
++                    Modifier
++                        .weight(1f)
++                        .fillMaxHeight()
++                ) {
++                    AndroidView(
++                        factory = { androidContext ->
++                            FaceDrivenCadSurfaceView(androidContext).also { view ->
++                                surface = view
++                                onSurfaceReady(view)
++                            }
++                        },
++                        update = { view ->
++                            view.onFaceSelected = { face ->
++                                if (!loading && directCylinder) {
++                                    selectedFace = face
++                                    view.setSelectedFace(face)
++                                    status = when (face) {
++                                        EditableCadFace.TOP -> "Cara superior: arrastre para cambiar profundidad"
++                                        EditableCadFace.SIDE -> "Cara curva: arrastre para cambiar diámetro del croquis"
++                                        EditableCadFace.NONE -> "Selección cancelada"
++                                    }
++                                } else if (!loading && !referenceFacePickMode) {
++                                    selectedFace = EditableCadFace.NONE
++                                    view.setSelectedFace(EditableCadFace.NONE)
++                                    status = "Seleccione una operación o croquis desde el árbol"
++                                }
++                            }
++                            view.onParameterPreview = { face, value ->
++                                if (!loading) {
++                                    status = when (face) {
++                                        EditableCadFace.TOP -> "Profundidad: ${v23Mm(value.toDouble())}"
++                                        EditableCadFace.SIDE -> "Diámetro: ${v23Mm(value.toDouble())}"
++                                        EditableCadFace.NONE -> status
++                                    }
++                                }
++                            }
++                            view.onParameterCommit = { face, value ->
++                                if (!loading && directCylinder) {
++                                    val first = history.current.features.first()
++                                    val diameter = if (face == EditableCadFace.SIDE) {
++                                        value.toDouble()
++                                    } else first.parameters["diameter"] ?: 34.93
++                                    val depth = if (face == EditableCadFace.TOP) {
++                                        value.toDouble()
++                                    } else first.parameters["depth"] ?: 40.0
++                                    commitProgram(
++                                        history.current.updateBaseCylinder(diameter, depth),
++                                        false,
++                                        "Saliente-Extruir1 actualizado en tiempo real",
++                                        V23Selection(V23NodeKind.FEATURE, first.id)
++                                    )
++                                }
++                            }
++                            view.onReferenceFacePicked = { picked ->
++                                referenceFacePickMode = false
++                                if (picked == null) {
++                                    status = "No se detectó una cara bajo el toque"
++                                } else {
++                                    val frame = CadFaceFrame(
++                                        reference = picked.reference,
++                                        label = "Cara seleccionada",
++                                        origin = CadVector3(picked.pointX.toDouble(), picked.pointY.toDouble(), picked.pointZ.toDouble()),
++                                        normal = CadVector3(picked.normalX.toDouble(), picked.normalY.toDouble(), picked.normalZ.toDouble()),
++                                        xAxis = CadVector3(picked.xAxisX.toDouble(), picked.xAxisY.toDouble(), picked.xAxisZ.toDouble()),
++                                        yAxis = CadVector3(picked.yAxisX.toDouble(), picked.yAxisY.toDouble(), picked.yAxisZ.toDouble())
++                                    )
++                                    val next = history.current.addFaceParallelPlane(frame)

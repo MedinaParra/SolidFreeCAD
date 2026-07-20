@@ -11,8 +11,8 @@ android {
     applicationId = "com.aistudio.solidmacro.fctech"
     minSdk = 24
     targetSdk = 36
-    versionCode = 13
-    versionName = "2.2-polished-workbench-history"
+    versionCode = 14
+    versionName = "2.3-reference-planes-final-interface"
 
     ndk {
       abiFilters += listOf("armeabi-v7a", "arm64-v8a")

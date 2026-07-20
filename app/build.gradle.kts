@@ -11,8 +11,8 @@ android {
     applicationId = "com.aistudio.solidmacro.fctech"
     minSdk = 24
     targetSdk = 36
-    versionCode = 15
-    versionName = "2.3.1-freecad-rotation-hotfix"
+    versionCode = 16
+    versionName = "2.4-industrial-hardening"
 
     ndk {
       abiFilters += listOf("armeabi-v7a", "arm64-v8a")

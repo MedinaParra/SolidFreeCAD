@@ -11,8 +11,8 @@ android {
     applicationId = "com.aistudio.solidmacro.fctech"
     minSdk = 24
     targetSdk = 36
-    versionCode = 18
-    versionName = "2.6-multientity-sketch-constraints"
+    versionCode = 19
+    versionName = "2.7-topology-selection-loops"
 
     ndk {
       abiFilters += listOf("armeabi-v7a", "arm64-v8a")
@@ -83,3 +83,19 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
 }
+
+val generatedV27Directory = layout.buildDirectory.dir("generated/source/v27")
+val generateV27Sources = tasks.register("generateV27Sources") {
+  val first = file("src/main/v27gen/SolidFreeCadWorkbenchActivityV27.part1")
+  val second = file("src/main/v27gen/SolidFreeCadWorkbenchActivityV27.part2")
+  val output = generatedV27Directory.map { it.file("com/example/faceui/SolidFreeCadWorkbenchActivityV27.kt") }
+  inputs.files(first, second)
+  outputs.file(output)
+  doLast {
+    val target = output.get().asFile
+    target.parentFile.mkdirs()
+    target.writeText(first.readText() + second.readText())
+  }
+}
+android.sourceSets.getByName("main").java.srcDir(generatedV27Directory)
+tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(generateV27Sources) }

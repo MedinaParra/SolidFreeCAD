@@ -3,19 +3,10 @@ package com.example.features
 import java.util.Locale
 
 enum class BasicCadFeatureFamily(val label: String) {
-    SKETCH_BASED("Croquis y material"),
-    REMOVE_MATERIAL("Cortes y agujeros"),
-    DRESS_UP("Acabado"),
-    TRANSFORM("Patrones y transformación"),
-    BOOLEAN("Cuerpos")
+    SKETCH_BASED("Croquis y material"), REMOVE_MATERIAL("Cortes y agujeros"), DRESS_UP("Acabado"), TRANSFORM("Patrones y transformación"), BOOLEAN("Cuerpos")
 }
 
-enum class BasicCadOperation(
-    val label: String,
-    val family: BasicCadFeatureFamily,
-    val description: String,
-    val generalTopology: Boolean = true
-) {
+enum class BasicCadOperation(val label: String, val family: BasicCadFeatureFamily, val description: String, val generalTopology: Boolean = true) {
     BOSS_EXTRUDE("Saliente-Extruir", BasicCadFeatureFamily.SKETCH_BASED, "Añade material desde un perfil cerrado."),
     CUT_EXTRUDE("Corte-Extruir", BasicCadFeatureFamily.REMOVE_MATERIAL, "Elimina material con un perfil extruido."),
     BOSS_REVOLVE("Saliente-Revolución", BasicCadFeatureFamily.SKETCH_BASED, "Añade una geometría de revolución."),
@@ -41,151 +32,65 @@ enum class BasicCadOperation(
     COMBINE_COMMON("Combinar-Común", BasicCadFeatureFamily.BOOLEAN, "Conserva la intersección de dos cuerpos.")
 }
 
-data class BasicCadFeature(
-    val id: Long,
-    val operation: BasicCadOperation,
-    val label: String = operation.label,
-    val parameters: Map<String, Double> = emptyMap(),
-    val suppressed: Boolean = false,
-    val sketchId: Long? = null,
-    val planeId: Long? = null
-)
+data class BasicCadFeature(val id: Long, val operation: BasicCadOperation, val label: String = operation.label, val parameters: Map<String, Double> = emptyMap(), val suppressed: Boolean = false, val sketchId: Long? = null, val planeId: Long? = null)
 
 data class BasicCadProgram(
     val documentName: String = "Pieza1",
-    val features: List<BasicCadFeature> = listOf(
-        BasicCadFeature(
-            id = 1L,
-            operation = BasicCadOperation.BOSS_EXTRUDE,
-            label = "Saliente-Extruir1",
-            parameters = mapOf("diameter" to 34.93, "depth" to 40.0),
-            sketchId = 1L,
-            planeId = 1L
-        )
-    ),
+    val features: List<BasicCadFeature> = listOf(BasicCadFeature(1L, BasicCadOperation.BOSS_EXTRUDE, "Saliente-Extruir1", mapOf("diameter" to 34.93, "depth" to 40.0), sketchId = 1L, planeId = 1L)),
     val planes: List<CadReferencePlane> = defaultCadReferencePlanes(),
     val sketches: List<CadSketchDefinition> = defaultCadSketches(),
     val revision: Long = 0L
 ) {
-    fun append(
-        operation: BasicCadOperation,
-        sketchId: Long? = if (operation.requiresSketch()) sketches.lastOrNull()?.id else null,
-        planeId: Long? = sketchId?.let { id -> sketches.firstOrNull { it.id == id }?.planeId }
-    ): BasicCadProgram {
+    fun append(operation: BasicCadOperation, sketchId: Long? = if (operation.requiresSketch()) sketches.lastOrNull()?.id else null, planeId: Long? = sketchId?.let { id -> sketches.firstOrNull { it.id == id }?.planeId }): BasicCadProgram {
         val number = features.count { it.operation == operation } + 1
-        val feature = BasicCadFeature(
-            id = (features.maxOfOrNull { it.id } ?: 0L) + 1L,
-            operation = operation,
-            label = "${operation.label}$number",
-            parameters = operation.defaultParameters(),
-            sketchId = sketchId,
-            planeId = planeId
-        )
+        val linkedSketch = sketchId?.let { id -> sketches.firstOrNull { it.id == id } }
+        val featureParameters = if (linkedSketch != null && operation in setOf(BasicCadOperation.BOSS_EXTRUDE, BasicCadOperation.CUT_EXTRUDE)) mapOf("depth" to operation.defaultParameters().getValue("depth")) else operation.defaultParameters()
+        val feature = BasicCadFeature((features.maxOfOrNull { it.id } ?: 0L) + 1L, operation, "${operation.label}$number", featureParameters, sketchId = sketchId, planeId = planeId)
         return copy(features = features + feature, revision = revision + 1L)
     }
 
     fun updateFeature(featureId: Long, parameters: Map<String, Double>): BasicCadProgram {
         require(parameters.values.all { it.isFinite() }) { "Los parámetros deben ser finitos" }
-        return copy(
-            features = features.map { feature ->
-                if (feature.id == featureId) feature.copy(parameters = parameters) else feature
-            },
-            revision = revision + 1L
-        )
+        val target = features.firstOrNull { it.id == featureId } ?: return this
+        val updatedSketches = target.sketchId?.let { sketchId ->
+            val diameter = parameters["diameter"]
+            if (diameter != null) sketches.map { sketch -> if (sketch.id == sketchId && sketch.profile == CadSketchProfile.CIRCLE) sketch.copy(parameters = sketch.parameters + ("diameter" to diameter)) else sketch } else sketches
+        } ?: sketches
+        return copy(features = features.map { if (it.id == featureId) it.copy(parameters = parameters) else it }, sketches = updatedSketches, revision = revision + 1L)
     }
 
-    fun remove(featureId: Long): BasicCadProgram = copy(
-        features = features.filterNot { it.id == featureId },
-        revision = revision + 1L
-    )
-
-    fun toggleSuppressed(featureId: Long): BasicCadProgram = copy(
-        features = features.map { feature ->
-            if (feature.id == featureId) feature.copy(suppressed = !feature.suppressed) else feature
-        },
-        revision = revision + 1L
-    )
+    fun remove(featureId: Long): BasicCadProgram = copy(features = features.filterNot { it.id == featureId }, revision = revision + 1L)
+    fun toggleSuppressed(featureId: Long): BasicCadProgram = copy(features = features.map { if (it.id == featureId) it.copy(suppressed = !it.suppressed) else it }, revision = revision + 1L)
 
     fun updateBaseCylinder(diameter: Double, depth: Double): BasicCadProgram {
-        require(diameter.isFinite() && diameter > 0.0)
-        require(depth.isFinite() && depth > 0.0)
+        require(diameter.isFinite() && diameter > 0.0); require(depth.isFinite() && depth > 0.0)
         val first = features.firstOrNull() ?: return this
-        val updatedFeature = first.copy(
-            parameters = first.parameters + mapOf("diameter" to diameter, "depth" to depth)
-        )
-        val updatedSketches = first.sketchId?.let { sketchId ->
-            sketches.map { sketch ->
-                if (sketch.id == sketchId && sketch.profile == CadSketchProfile.CIRCLE) {
-                    sketch.copy(parameters = sketch.parameters + ("diameter" to diameter))
-                } else sketch
-            }
-        } ?: sketches
-        return copy(
-            features = listOf(updatedFeature) + features.drop(1),
-            sketches = updatedSketches,
-            revision = revision + 1L
-        )
+        val updatedFeature = first.copy(parameters = first.parameters + mapOf("diameter" to diameter, "depth" to depth))
+        val updatedSketches = first.sketchId?.let { sketchId -> sketches.map { if (it.id == sketchId && it.profile == CadSketchProfile.CIRCLE) it.copy(parameters = it.parameters + ("diameter" to diameter)) else it } } ?: sketches
+        return copy(features = listOf(updatedFeature) + features.drop(1), sketches = updatedSketches, revision = revision + 1L)
     }
 
     fun addOffsetPlane(parentPlaneId: Long, offsetMm: Double, label: String? = null): BasicCadProgram {
         require(offsetMm.isFinite()) { "La separación del plano debe ser finita" }
-        val parent = planes.firstOrNull { it.id == parentPlaneId }
-            ?: error("No se encontró el plano de referencia")
+        val parent = planes.firstOrNull { it.id == parentPlaneId } ?: error("No se encontró el plano de referencia")
         val number = planes.count { it.kind != CadPlaneKind.BASE } + 1
-        val next = CadReferencePlane(
-            id = (planes.maxOfOrNull { it.id } ?: 0L) + 1L,
-            label = label?.takeIf { it.isNotBlank() } ?: "Plano${number}",
-            kind = CadPlaneKind.OFFSET,
-            parentPlaneId = parent.id,
-            normal = parent.normal,
-            xAxis = parent.xAxis,
-            offsetMm = offsetMm,
-            visible = true
-        )
+        val next = CadReferencePlane((planes.maxOfOrNull { it.id } ?: 0L) + 1L, label?.takeIf { it.isNotBlank() } ?: "Plano$number", CadPlaneKind.OFFSET, parentPlaneId = parent.id, normal = parent.normal, xAxis = parent.xAxis, offsetMm = offsetMm, visible = true)
         return copy(planes = planes + next, revision = revision + 1L)
     }
 
-    fun addFaceParallelPlane(
-        face: PlanarFaceReference,
-        offsetMm: Double,
-        label: String? = null
-    ): BasicCadProgram {
+    fun addFaceParallelPlane(face: PlanarFaceReference, offsetMm: Double, label: String? = null): BasicCadProgram {
         require(offsetMm.isFinite()) { "La separación del plano debe ser finita" }
         val number = planes.count { it.kind != CadPlaneKind.BASE } + 1
-        val next = CadReferencePlane(
-            id = (planes.maxOfOrNull { it.id } ?: 0L) + 1L,
-            label = label?.takeIf { it.isNotBlank() } ?: "Plano${number}",
-            kind = CadPlaneKind.FACE_PARALLEL,
-            supportFaceLabel = face.label,
-            anchor = face.point,
-            normal = face.normal.normalized(),
-            xAxis = face.xAxis.normalized(),
-            offsetMm = offsetMm,
-            visible = true
-        )
+        val next = CadReferencePlane((planes.maxOfOrNull { it.id } ?: 0L) + 1L, label?.takeIf { it.isNotBlank() } ?: "Plano$number", CadPlaneKind.FACE_PARALLEL, supportFaceLabel = face.label, anchor = face.point, normal = face.normal.normalized(), xAxis = face.xAxis.normalized(), offsetMm = offsetMm, visible = true)
         return copy(planes = planes + next, revision = revision + 1L)
     }
 
     fun updatePlane(planeId: Long, offsetMm: Double, visible: Boolean): BasicCadProgram {
         require(offsetMm.isFinite())
-        return copy(
-            planes = planes.map { plane ->
-                if (plane.id == planeId && plane.kind != CadPlaneKind.BASE) {
-                    plane.copy(offsetMm = offsetMm, visible = visible)
-                } else if (plane.id == planeId) {
-                    plane.copy(visible = visible)
-                } else plane
-            },
-            revision = revision + 1L
-        )
+        return copy(planes = planes.map { plane -> if (plane.id == planeId && plane.kind != CadPlaneKind.BASE) plane.copy(offsetMm = offsetMm, visible = visible) else if (plane.id == planeId) plane.copy(visible = visible) else plane }, revision = revision + 1L)
     }
 
-    fun togglePlaneVisibility(planeId: Long): BasicCadProgram = copy(
-        planes = planes.map { plane ->
-            if (plane.id == planeId) plane.copy(visible = !plane.visible) else plane
-        },
-        revision = revision + 1L
-    )
+    fun togglePlaneVisibility(planeId: Long): BasicCadProgram = copy(planes = planes.map { if (it.id == planeId) it.copy(visible = !it.visible) else it }, revision = revision + 1L)
 
     fun removePlane(planeId: Long): BasicCadProgram {
         val plane = planes.firstOrNull { it.id == planeId } ?: return this
@@ -195,58 +100,30 @@ data class BasicCadProgram(
         return copy(planes = planes.filterNot { it.id == planeId }, revision = revision + 1L)
     }
 
-    fun addSketch(
-        planeId: Long,
-        profile: CadSketchProfile,
-        parameters: Map<String, Double>? = null,
-        label: String? = null
-    ): BasicCadProgram {
+    fun addSketch(planeId: Long, profile: CadSketchProfile, parameters: Map<String, Double>? = null, label: String? = null): BasicCadProgram {
         require(planes.any { it.id == planeId }) { "El plano seleccionado no existe" }
         val number = sketches.size + 1
-        val defaults = parameters ?: when (profile) {
-            CadSketchProfile.CIRCLE -> mapOf("diameter" to 20.0)
-            CadSketchProfile.RECTANGLE -> mapOf("width" to 30.0, "height" to 20.0)
-        }
+        val defaults = parameters ?: when (profile) { CadSketchProfile.CIRCLE -> mapOf("diameter" to 20.0); CadSketchProfile.RECTANGLE -> mapOf("width" to 30.0, "height" to 20.0) }
         require(defaults.values.all { it.isFinite() && it > 0.0 })
-        val sketch = CadSketchDefinition(
-            id = (sketches.maxOfOrNull { it.id } ?: 0L) + 1L,
-            label = label?.takeIf { it.isNotBlank() } ?: "Croquis${number}",
-            planeId = planeId,
-            profile = profile,
-            parameters = defaults
-        )
+        val sketch = CadSketchDefinition((sketches.maxOfOrNull { it.id } ?: 0L) + 1L, label?.takeIf { it.isNotBlank() } ?: "Croquis$number", planeId, profile, defaults)
         return copy(sketches = sketches + sketch, revision = revision + 1L)
     }
 
     fun updateSketch(sketchId: Long, parameters: Map<String, Double>, visible: Boolean): BasicCadProgram {
         require(parameters.values.all { it.isFinite() && it > 0.0 })
         return copy(
-            sketches = sketches.map { sketch ->
-                if (sketch.id == sketchId) sketch.copy(parameters = parameters, visible = visible) else sketch
-            },
+            sketches = sketches.map { if (it.id == sketchId) it.copy(parameters = parameters, visible = visible) else it },
             features = features.map { feature ->
                 if (feature.sketchId == sketchId && feature.operation == BasicCadOperation.BOSS_EXTRUDE) {
                     val diameter = parameters["diameter"]
-                    if (diameter != null && "diameter" in feature.parameters) {
-                        feature.copy(parameters = feature.parameters + ("diameter" to diameter))
-                    } else feature
+                    if (diameter != null && "diameter" in feature.parameters) feature.copy(parameters = feature.parameters + ("diameter" to diameter)) else feature
                 } else feature
-            },
-            revision = revision + 1L
+            }, revision = revision + 1L
         )
     }
 
-    fun toggleSketchVisibility(sketchId: Long): BasicCadProgram = copy(
-        sketches = sketches.map { sketch ->
-            if (sketch.id == sketchId) sketch.copy(visible = !sketch.visible) else sketch
-        },
-        revision = revision + 1L
-    )
-
-    fun removeSketch(sketchId: Long): BasicCadProgram {
-        require(features.none { it.sketchId == sketchId }) { "El croquis está utilizado por una operación" }
-        return copy(sketches = sketches.filterNot { it.id == sketchId }, revision = revision + 1L)
-    }
+    fun toggleSketchVisibility(sketchId: Long): BasicCadProgram = copy(sketches = sketches.map { if (it.id == sketchId) it.copy(visible = !it.visible) else it }, revision = revision + 1L)
+    fun removeSketch(sketchId: Long): BasicCadProgram { require(features.none { it.sketchId == sketchId }) { "El croquis está utilizado por una operación" }; return copy(sketches = sketches.filterNot { it.id == sketchId }, revision = revision + 1L) }
 
     fun resolvePlane(planeId: Long): ResolvedCadPlane {
         val visited = mutableSetOf<Long>()
@@ -258,22 +135,10 @@ data class BasicCadProgram(
             val origin = when (plane.kind) {
                 CadPlaneKind.BASE -> plane.anchor
                 CadPlaneKind.FACE_PARALLEL -> plane.anchor + normal * plane.offsetMm
-                CadPlaneKind.OFFSET -> {
-                    val parent = resolve(plane.parentPlaneId ?: error("Plano sin referencia"))
-                    parent.origin + parent.normal * plane.offsetMm
-                }
+                CadPlaneKind.OFFSET -> { val parent = resolve(plane.parentPlaneId ?: error("Plano sin referencia")); parent.origin + parent.normal * plane.offsetMm }
             }
             visited.remove(id)
-            return ResolvedCadPlane(
-                id = plane.id,
-                label = plane.label,
-                origin = origin,
-                normal = normal,
-                xAxis = xAxis,
-                yAxis = normal.cross(xAxis).normalized(),
-                visible = plane.visible,
-                kind = plane.kind
-            )
+            return ResolvedCadPlane(plane.id, plane.label, origin, normal, xAxis, normal.cross(xAxis).normalized(), plane.visible, plane.kind)
         }
         return resolve(planeId)
     }
@@ -305,7 +170,4 @@ fun BasicCadOperation.defaultParameters(): Map<String, Double> = when (this) {
     BasicCadOperation.COMBINE_COMMON -> mapOf("diameter" to 28.0)
 }
 
-internal fun Double.pythonNumber(): String {
-    require(isFinite()) { "CAD parameter must be finite" }
-    return String.format(Locale.ROOT, "%.9f", this)
-}
+internal fun Double.pythonNumber(): String { require(isFinite()) { "CAD parameter must be finite" }; return String.format(Locale.ROOT, "%.9f", this) }

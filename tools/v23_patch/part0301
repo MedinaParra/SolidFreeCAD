@@ -1,0 +1,174 @@
++                        enabled = enabled,
++                        onClick = { onSelect(V23Selection(V23NodeKind.IMPORTED)) }
++                    )
++                    Text(
++                        "Sin historial paramétrico reconstruido",
++                        color = V23Muted,
++                        fontSize = 7.sp,
++                        modifier = Modifier.padding(start = 18.dp, top = 3.dp)
++                    )
++                    return@Column
++                }
++
++                V23TreeRow(
++                    label = "Cuerpo1",
++                    prefix = "▾",
++                    selected = selection.kind == V23NodeKind.BODY,
++                    enabled = enabled,
++                    onClick = { onSelect(V23Selection(V23NodeKind.BODY)) }
++                )
++                Text("    ▾ Origen", color = V23Text, fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 3.dp))
++                program.planes.forEach { plane ->
++                    val active = plane.id == program.activePlaneId
++                    V23TreeRow(
++                        label = plane.label + if (active) "  [activo]" else "",
++                        prefix = if (plane.visible) "▱" else "▰",
++                        selected = selection.kind == V23NodeKind.PLANE && selection.id == plane.id,
++                        enabled = enabled,
++                        indent = 22.dp,
++                        color = if (active) V23Accent else V23Text,
++                        onClick = { onSelect(V23Selection(V23NodeKind.PLANE, plane.id)) }
++                    )
++                }
++                HorizontalDivider(color = V23Divider.copy(alpha = 0.55f), modifier = Modifier.padding(vertical = 5.dp))
++
++                val linkedSketchIds = program.features.mapNotNull { it.sketchId }.toSet()
++                program.features.forEach { feature ->
++                    V23TreeRow(
++                        label = feature.label,
++                        prefix = if (feature.suppressed) "○" else "◆",
++                        selected = selection.kind == V23NodeKind.FEATURE && selection.id == feature.id,
++                        enabled = enabled,
++                        indent = 8.dp,
++                        color = if (feature.suppressed) V23Muted else V23Text,
++                        onClick = { onSelect(V23Selection(V23NodeKind.FEATURE, feature.id)) }
++                    )
++                    feature.sketchId?.let { sketchId ->
++                        program.sketch(sketchId)?.let { sketch ->
++                            V23TreeRow(
++                                label = sketch.label,
++                                prefix = if (sketch.visible) "(-)" else "( )",
++                                selected = selection.kind == V23NodeKind.SKETCH && selection.id == sketch.id,
++                                enabled = enabled,
++                                indent = 30.dp,
++                                color = V23Secondary,
++                                onClick = { onSelect(V23Selection(V23NodeKind.SKETCH, sketch.id)) }
++                            )
++                        }
++                    }
++                }
++                program.sketches.filterNot { it.id in linkedSketchIds }.forEach { sketch ->
++                    V23TreeRow(
++                        label = sketch.label,
++                        prefix = if (sketch.visible) "(-)" else "( )",
++                        selected = selection.kind == V23NodeKind.SKETCH && selection.id == sketch.id,
++                        enabled = enabled,
++                        indent = 8.dp,
++                        color = V23Secondary,
++                        onClick = { onSelect(V23Selection(V23NodeKind.SKETCH, sketch.id)) }
++                    )
++                }
++            }
++        }
++    }
++}
++
++@Composable
++private fun V23TreeRow(
++    label: String,
++    prefix: String,
++    selected: Boolean,
++    enabled: Boolean,
++    indent: androidx.compose.ui.unit.Dp = 0.dp,
++    color: Color = V23Text,
++    onClick: () -> Unit
++) {
++    Row(
++        Modifier
++            .fillMaxWidth()
++            .padding(start = indent)
++            .background(if (selected) V23Selected else Color.Transparent, RoundedCornerShape(4.dp))
++            .clickable(enabled = enabled, onClick = onClick)
++            .padding(horizontal = 5.dp, vertical = 7.dp),
++        verticalAlignment = Alignment.CenterVertically
++    ) {
++        Text(prefix, color = if (enabled) V23Accent else V23Muted, fontSize = 8.sp)
++        Spacer(Modifier.width(5.dp))
++        Text(
++            label,
++            color = color,
++            fontSize = 8.sp,
++            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
++            maxLines = 1,
++            overflow = TextOverflow.Ellipsis
++        )
++    }
++}
++
++@Composable
++private fun V23PropertiesPanel(
++    selection: V23Selection,
++    document: V23Document?,
++    feature: BasicCadFeature?,
++    sketch: CadSketch?,
++    plane: CadReferencePlane?,
++    enabled: Boolean,
++    onClose: () -> Unit,
++    onApplyFeature: (Map<String, Double>) -> Unit,
++    onSuppress: () -> Unit,
++    onDeleteFeature: () -> Unit,
++    onEditSketch: (Long) -> Unit,
++    onToggleSketch: (Long) -> Unit,
++    onUpdatePlaneOffset: (Long, Double) -> Unit,
++    onTogglePlane: (Long) -> Unit,
++    onCreateSketch: (Long) -> Unit,
++    modifier: Modifier
++) {
++    Surface(modifier.fillMaxHeight(), color = V23Panel, contentColor = V23Text, shadowElevation = 3.dp) {
++        Column {
++            Row(
++                Modifier
++                    .fillMaxWidth()
++                    .background(V23Header)
++                    .padding(horizontal = 7.dp, vertical = 4.dp),
++                verticalAlignment = Alignment.CenterVertically
++            ) {
++                Text("PROPIEDADES", Modifier.weight(1f), color = V23Text, fontSize = 9.sp, fontWeight = FontWeight.Bold)
++                IconButton(onClick = onClose, modifier = Modifier.size(34.dp)) {
++                    Icon(Icons.Default.KeyboardArrowRight, "Ocultar", tint = V23Accent)
++                }
++            }
++            HorizontalDivider(color = V23Divider)
++            when (selection.kind) {
++                V23NodeKind.FEATURE -> V23FeatureProperties(
++                    feature = feature,
++                    enabled = enabled,
++                    onApply = onApplyFeature,
++                    onSuppress = onSuppress,
++                    onDelete = onDeleteFeature,
++                    modifier = Modifier.fillMaxSize()
++                )
++                V23NodeKind.SKETCH -> V23SketchProperties(
++                    sketch = sketch,
++                    enabled = enabled,
++                    onEdit = onEditSketch,
++                    onToggle = onToggleSketch,
++                    modifier = Modifier.fillMaxSize()
++                )
++                V23NodeKind.PLANE -> V23PlaneProperties(
++                    plane = plane,
++                    enabled = enabled,
++                    onUpdateOffset = onUpdatePlaneOffset,
++                    onToggle = onTogglePlane,
++                    onCreateSketch = onCreateSketch,
++                    modifier = Modifier.fillMaxSize()
++                )
++                V23NodeKind.BODY,
++                V23NodeKind.IMPORTED -> Column(
++                    Modifier
++                        .fillMaxSize()
++                        .verticalScroll(rememberScrollState())
++                        .padding(12.dp),
++                    verticalArrangement = Arrangement.spacedBy(8.dp)
++                ) {
++                    Text(document?.name ?: "Sin documento", color = V23Text, fontSize = 12.sp, fontWeight = FontWeight.Bold)

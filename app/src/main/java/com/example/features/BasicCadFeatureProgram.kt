@@ -46,7 +46,9 @@ data class BasicCadFeature(
     val operation: BasicCadOperation,
     val label: String = operation.label,
     val parameters: Map<String, Double> = emptyMap(),
-    val suppressed: Boolean = false
+    val suppressed: Boolean = false,
+    val sketchId: Long? = null,
+    val planeId: Long? = null
 )
 
 data class BasicCadProgram(
@@ -56,18 +58,45 @@ data class BasicCadProgram(
             id = 1L,
             operation = BasicCadOperation.BOSS_EXTRUDE,
             label = "Saliente-Extruir1",
-            parameters = mapOf("diameter" to 34.93, "depth" to 40.0)
+            parameters = mapOf("diameter" to 34.93, "depth" to 40.0),
+            sketchId = 1L,
+            planeId = CadReferencePlane.XY_ID
         )
     ),
+    val planes: List<CadReferencePlane> = CadReferencePlane.defaults(),
+    val sketches: List<CadSketch> = listOf(CadSketch.defaultCircle()),
+    val activePlaneId: Long = CadReferencePlane.XY_ID,
+    val activeSketchId: Long? = 1L,
     val revision: Long = 0L
 ) {
-    fun append(operation: BasicCadOperation): BasicCadProgram {
+    init {
+        require(planes.map { it.id }.distinct().size == planes.size) { "Los planos deben tener IDs únicos" }
+        require(sketches.map { it.id }.distinct().size == sketches.size) { "Los croquis deben tener IDs únicos" }
+        require(features.map { it.id }.distinct().size == features.size) { "Las operaciones deben tener IDs únicos" }
+        require(planes.any { it.id == activePlaneId }) { "El plano activo debe existir" }
+    }
+
+    fun plane(planeId: Long?): CadReferencePlane? = planeId?.let { id -> planes.firstOrNull { it.id == id } }
+    fun sketch(sketchId: Long?): CadSketch? = sketchId?.let { id -> sketches.firstOrNull { it.id == id } }
+    fun activePlane(): CadReferencePlane = plane(activePlaneId) ?: planes.first()
+    fun activeSketch(): CadSketch? = sketch(activeSketchId)
+
+    fun append(operation: BasicCadOperation): BasicCadProgram = append(operation, activeSketchId)
+
+    fun append(operation: BasicCadOperation, sketchId: Long?): BasicCadProgram {
+        val selectedSketch = sketch(sketchId)
         val number = features.count { it.operation == operation } + 1
+        val defaults = operation.defaultParameters().toMutableMap()
+        if (operation in setOf(BasicCadOperation.BOSS_EXTRUDE, BasicCadOperation.CUT_EXTRUDE)) {
+            selectedSketch?.parameters?.forEach { (key, value) -> defaults.putIfAbsent(key, value) }
+        }
         val feature = BasicCadFeature(
             id = (features.maxOfOrNull { it.id } ?: 0L) + 1L,
             operation = operation,
             label = "${operation.label}$number",
-            parameters = operation.defaultParameters()
+            parameters = defaults,
+            sketchId = selectedSketch?.id,
+            planeId = selectedSketch?.planeId ?: activePlaneId
         )
         return copy(features = features + feature, revision = revision + 1L)
     }
@@ -94,14 +123,170 @@ data class BasicCadProgram(
         revision = revision + 1L
     )
 
+    fun setActivePlane(planeId: Long): BasicCadProgram {
+        require(planes.any { it.id == planeId }) { "El plano no existe" }
+        return copy(activePlaneId = planeId, revision = revision + 1L)
+    }
+
+    fun setActiveSketch(sketchId: Long?): BasicCadProgram {
+        require(sketchId == null || sketches.any { it.id == sketchId }) { "El croquis no existe" }
+        val planeId = sketch(sketchId)?.planeId ?: activePlaneId
+        return copy(activeSketchId = sketchId, activePlaneId = planeId, revision = revision + 1L)
+    }
+
+    fun addSketch(
+        profileType: CadSketchProfileType,
+        planeId: Long = activePlaneId,
+        parameters: Map<String, Double> = profileType.defaultParameters()
+    ): BasicCadProgram {
+        require(planes.any { it.id == planeId }) { "El plano seleccionado no existe" }
+        require(parameters.values.all { it.isFinite() })
+        val id = (sketches.maxOfOrNull { it.id } ?: 0L) + 1L
+        val sketch = CadSketch(
+            id = id,
+            label = "Croquis$id",
+            planeId = planeId,
+            profileType = profileType,
+            parameters = parameters,
+            fullyDefined = profileType.closed
+        )
+        return copy(
+            sketches = sketches + sketch,
+            activePlaneId = planeId,
+            activeSketchId = id,
+            revision = revision + 1L
+        )
+    }
+
+    fun updateSketch(
+        sketchId: Long,
+        profileType: CadSketchProfileType,
+        parameters: Map<String, Double>
+    ): BasicCadProgram {
+        require(parameters.values.all { it.isFinite() })
+        val current = sketch(sketchId) ?: error("El croquis no existe")
+        val updatedSketch = current.copy(
+            profileType = profileType,
+            parameters = parameters,
+            fullyDefined = profileType.closed
+        )
+        val updatedFeatures = features.map { feature ->
+            if (feature.sketchId != sketchId) return@map feature
+            val merged = feature.parameters.toMutableMap()
+            parameters.forEach { (key, value) -> merged[key] = value }
+            feature.copy(parameters = merged)
+        }
+        return copy(
+            sketches = sketches.map { if (it.id == sketchId) updatedSketch else it },
+            features = updatedFeatures,
+            activePlaneId = current.planeId,
+            activeSketchId = sketchId,
+            revision = revision + 1L
+        )
+    }
+
+    fun toggleSketchVisibility(sketchId: Long): BasicCadProgram = copy(
+        sketches = sketches.map { if (it.id == sketchId) it.copy(visible = !it.visible) else it },
+        revision = revision + 1L
+    )
+
+    fun addOffsetPlane(sourcePlaneId: Long, offsetMm: Double): BasicCadProgram {
+        require(offsetMm.isFinite())
+        val source = plane(sourcePlaneId) ?: error("El plano de referencia no existe")
+        val id = (planes.maxOfOrNull { it.id } ?: 0L) + 1L
+        val frame = source.frame()
+        val created = CadReferencePlane(
+            id = id,
+            label = "Plano$id",
+            kind = CadReferencePlaneKind.OFFSET,
+            origin = frame.origin + frame.normal * offsetMm,
+            normal = frame.normal,
+            xAxis = frame.xAxis,
+            yAxis = frame.yAxis,
+            sourcePlaneId = source.id,
+            offsetMm = offsetMm,
+            visible = true
+        )
+        return copy(planes = planes + created, activePlaneId = id, activeSketchId = null, revision = revision + 1L)
+    }
+
+    fun addFaceParallelPlane(face: CadFaceFrame, offsetMm: Double = 0.0): BasicCadProgram {
+        require(offsetMm.isFinite())
+        val normalized = face.normalized()
+        val id = (planes.maxOfOrNull { it.id } ?: 0L) + 1L
+        val created = CadReferencePlane(
+            id = id,
+            label = "Plano$id",
+            kind = CadReferencePlaneKind.FACE_PARALLEL,
+            origin = normalized.origin + normalized.normal * offsetMm,
+            normal = normalized.normal,
+            xAxis = normalized.xAxis,
+            yAxis = normalized.yAxis,
+            sourceFaceReference = normalized.reference,
+            offsetMm = offsetMm,
+            visible = true
+        )
+        return copy(planes = planes + created, activePlaneId = id, activeSketchId = null, revision = revision + 1L)
+    }
+
+    fun updatePlaneOffset(planeId: Long, offsetMm: Double): BasicCadProgram {
+        require(offsetMm.isFinite())
+        val target = plane(planeId) ?: error("El plano no existe")
+        require(target.kind != CadReferencePlaneKind.PRINCIPAL) { "Los planos principales no se desplazan" }
+        val updated = when (target.kind) {
+            CadReferencePlaneKind.OFFSET -> {
+                val source = plane(target.sourcePlaneId) ?: error("Falta el plano de referencia")
+                target.withOffset(source, offsetMm)
+            }
+            CadReferencePlaneKind.FACE_PARALLEL -> target.copy(
+                origin = target.origin + target.normal.normalized() * (offsetMm - target.offsetMm),
+                offsetMm = offsetMm
+            )
+            CadReferencePlaneKind.PRINCIPAL -> target
+        }
+        return copy(
+            planes = planes.map { if (it.id == planeId) updated else it },
+            revision = revision + 1L
+        )
+    }
+
+    fun togglePlaneVisibility(planeId: Long): BasicCadProgram = copy(
+        planes = planes.map { if (it.id == planeId) it.copy(visible = !it.visible) else it },
+        revision = revision + 1L
+    )
+
     fun updateBaseCylinder(diameter: Double, depth: Double): BasicCadProgram {
         require(diameter.isFinite() && diameter > 0.0)
         require(depth.isFinite() && depth > 0.0)
         val first = features.firstOrNull() ?: return this
-        val updated = first.copy(parameters = first.parameters + mapOf("diameter" to diameter, "depth" to depth))
-        return copy(features = listOf(updated) + features.drop(1), revision = revision + 1L)
+        val updatedFeature = first.copy(
+            parameters = first.parameters + mapOf("diameter" to diameter, "depth" to depth)
+        )
+        val linkedSketchId = first.sketchId
+        val updatedSketches = if (linkedSketchId == null) sketches else sketches.map { sketch ->
+            if (sketch.id == linkedSketchId && sketch.profileType == CadSketchProfileType.CIRCLE) {
+                sketch.copy(parameters = sketch.parameters + ("diameter" to diameter), fullyDefined = true)
+            } else sketch
+        }
+        return copy(
+            features = listOf(updatedFeature) + features.drop(1),
+            sketches = updatedSketches,
+            revision = revision + 1L
+        )
     }
 }
+
+fun BasicCadOperation.requiresClosedSketch(): Boolean = this in setOf(
+    BasicCadOperation.BOSS_EXTRUDE,
+    BasicCadOperation.CUT_EXTRUDE,
+    BasicCadOperation.BOSS_REVOLVE,
+    BasicCadOperation.CUT_REVOLVE,
+    BasicCadOperation.BOSS_SWEEP,
+    BasicCadOperation.CUT_SWEEP,
+    BasicCadOperation.BOSS_LOFT,
+    BasicCadOperation.CUT_LOFT,
+    BasicCadOperation.RIB
+)
 
 fun BasicCadOperation.defaultParameters(): Map<String, Double> = when (this) {
     BasicCadOperation.BOSS_EXTRUDE -> mapOf("length" to 30.0, "width" to 22.0, "depth" to 12.0)

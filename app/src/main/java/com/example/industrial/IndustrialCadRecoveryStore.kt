@@ -9,6 +9,8 @@ import com.example.features.CadPlaneKind
 import com.example.features.CadPlaneSet
 import com.example.features.CadReferencePlane
 import com.example.features.CadSketch
+import com.example.features.CadSketchConstraint
+import com.example.features.CadSketchConstraintKind
 import com.example.features.CadSketchPrimitive
 import com.example.features.CadSketchPrimitiveKind
 import com.example.features.CadVector3
@@ -32,7 +34,7 @@ import java.util.zip.CRC32
  */
 object IndustrialCadRecoveryStore {
     private const val MAGIC = 0x53464349
-    private const val VERSION = 1
+    private const val VERSION = 2
     private const val MAX_PAYLOAD_BYTES = 4 * 1024 * 1024
     private const val MAX_ITEMS = 10_000
 
@@ -127,7 +129,8 @@ object IndustrialCadRecoveryStore {
 
     private fun decodeStream(input: DataInputStream): RecoverySnapshot {
         require(input.readInt() == MAGIC) { "Archivo de recuperación desconocido" }
-        require(input.readInt() == VERSION) { "Versión de recuperación no compatible" }
+        val version = input.readInt()
+        require(version in 1..VERSION) { "Versión de recuperación no compatible" }
         val savedAt = input.readLong()
         val size = input.readInt()
         require(size in 1..MAX_PAYLOAD_BYTES) { "Tamaño de recuperación inválido" }
@@ -136,7 +139,7 @@ object IndustrialCadRecoveryStore {
         val expected = input.readLong()
         val actual = CRC32().apply { update(payload) }.value
         require(actual == expected) { "La recuperación está dañada" }
-        return RecoverySnapshot(decodePayload(payload), "memoria", savedAt)
+        return RecoverySnapshot(decodePayload(payload, version), "memoria", savedAt)
     }
 
     private fun encodePayload(program: BasicCadProgram): ByteArray = ByteArrayOutputStream().use { bytes ->
@@ -178,6 +181,15 @@ object IndustrialCadRecoveryStore {
                     output.writeUTF(primitive.kind.name)
                     output.writeParameters(primitive.parameters)
                 }
+                output.writeInt(sketch.constraints.size)
+                sketch.constraints.forEach { constraint ->
+                    output.writeLong(constraint.id)
+                    output.writeUTF(constraint.kind.name)
+                    output.writeLong(constraint.firstPrimitiveId)
+                    output.writeNullableLong(constraint.secondPrimitiveId)
+                    output.writeInt(constraint.firstPoint)
+                    output.writeInt(constraint.secondPoint)
+                }
             }
 
             output.writeInt(program.features.size)
@@ -194,7 +206,7 @@ object IndustrialCadRecoveryStore {
         bytes.toByteArray()
     }
 
-    private fun decodePayload(payload: ByteArray): BasicCadProgram =
+    private fun decodePayload(payload: ByteArray, version: Int): BasicCadProgram =
         DataInputStream(ByteArrayInputStream(payload)).use { input ->
             val documentName = input.readUTF().requireShortText()
             val revision = input.readLong()
@@ -242,7 +254,27 @@ object IndustrialCadRecoveryStore {
                         parameters = input.readParameters()
                     )
                 }
-                CadSketch(id, label, planeId, primitives, fullyConstrained, visible)
+                val constraints = if (version >= 2) {
+                    List(input.readBoundedCount()) {
+                        CadSketchConstraint(
+                            id = input.readLong(),
+                            kind = enumValueOf<CadSketchConstraintKind>(input.readUTF()),
+                            firstPrimitiveId = input.readLong(),
+                            secondPrimitiveId = input.readNullableLong(),
+                            firstPoint = input.readInt(),
+                            secondPoint = input.readInt()
+                        )
+                    }
+                } else emptyList()
+                CadSketch(
+                    id = id,
+                    label = label,
+                    planeId = planeId,
+                    primitives = primitives,
+                    fullyConstrained = fullyConstrained,
+                    visible = visible,
+                    constraints = constraints
+                )
             }
 
             val features = List(input.readBoundedCount()) {

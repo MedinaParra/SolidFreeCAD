@@ -23,7 +23,7 @@ object BasicCadMacroGenerator {
         } else {
             active.forEachIndexed { index, feature ->
                 appendLine("# ${feature.label}: ${feature.operation.description}")
-                appendFeature(feature, index)
+                appendFeature(program, feature, index)
                 appendLine()
             }
         }
@@ -36,22 +36,26 @@ object BasicCadMacroGenerator {
         appendLine("print('SolidFreeCAD: ${active.size} operaciones reconstruidas')")
     }
 
-    private fun StringBuilder.appendFeature(feature: BasicCadFeature, index: Int) {
+    private fun StringBuilder.appendFeature(program: BasicCadProgram, feature: BasicCadFeature, index: Int) {
         val p = feature.parameters
         fun n(key: String, fallback: Double): String = (p[key] ?: fallback).pythonNumber()
         val suffix = index + 1
         when (feature.operation) {
             BasicCadOperation.BOSS_EXTRUDE -> {
-                if ("diameter" in p) {
-                    appendLine("feature_$suffix = Part.makeCylinder(${n("diameter", 34.93)} / 2.0, ${n("depth", 40.0)})")
-                } else {
-                    appendLine("feature_$suffix = Part.makeBox(${n("length", 30.0)}, ${n("width", 22.0)}, ${n("depth", 12.0)}, App.Vector(-${n("length", 30.0)}/2.0, -${n("width", 22.0)}/2.0, _top_z(body)))")
+                if (!appendSketchExtrusion(program, feature, suffix, additive = true)) {
+                    if ("diameter" in p) {
+                        appendLine("feature_$suffix = Part.makeCylinder(${n("diameter", 34.93)} / 2.0, ${n("depth", 40.0)})")
+                    } else {
+                        appendLine("feature_$suffix = Part.makeBox(${n("length", 30.0)}, ${n("width", 22.0)}, ${n("depth", 12.0)}, App.Vector(-${n("length", 30.0)}/2.0, -${n("width", 22.0)}/2.0, _top_z(body)))")
+                    }
+                    appendLine("body = feature_$suffix if body is None else body.fuse(feature_$suffix)")
                 }
-                appendLine("body = feature_$suffix if body is None else body.fuse(feature_$suffix)")
             }
             BasicCadOperation.CUT_EXTRUDE -> {
-                appendLine("tool_$suffix = Part.makeBox(${n("length", 12.0)}, ${n("width", 8.0)}, ${n("depth", 50.0)}, App.Vector(-${n("length", 12.0)}/2.0, -${n("width", 8.0)}/2.0, -5.0))")
-                appendLine("body = _require_body(body).cut(tool_$suffix)")
+                if (!appendSketchExtrusion(program, feature, suffix, additive = false)) {
+                    appendLine("tool_$suffix = Part.makeBox(${n("length", 12.0)}, ${n("width", 8.0)}, ${n("depth", 50.0)}, App.Vector(-${n("length", 12.0)}/2.0, -${n("width", 8.0)}/2.0, -5.0))")
+                    appendLine("body = _require_body(body).cut(tool_$suffix)")
+                }
             }
             BasicCadOperation.BOSS_REVOLVE -> {
                 appendLine("feature_$suffix = Part.makeTorus(${n("majorRadius", 24.0)}, ${n("minorRadius", 4.0)}, App.Vector(0, 0, _top_z(body) * 0.55))")
@@ -79,20 +83,14 @@ object BasicCadMacroGenerator {
                 appendLine("tool_$suffix = Part.makeCone(${n("radius1", 7.0)}, ${n("radius2", 3.0)}, ${n("height", 50.0)}, App.Vector(0, 0, -5.0))")
                 appendLine("body = _require_body(body).cut(tool_$suffix)")
             }
-            BasicCadOperation.FILLET -> {
-                appendLine("body = _rounded_box(${n("length", 42.0)}, ${n("width", 30.0)}, ${n("height", 18.0)}, ${n("radius", 3.0)})")
-            }
-            BasicCadOperation.CHAMFER -> {
-                appendLine("body = _chamfered_prism(${n("length", 42.0)}, ${n("width", 30.0)}, ${n("height", 18.0)}, ${n("distance", 4.0)})")
-            }
+            BasicCadOperation.FILLET -> appendLine("body = _rounded_box(${n("length", 42.0)}, ${n("width", 30.0)}, ${n("height", 18.0)}, ${n("radius", 3.0)})")
+            BasicCadOperation.CHAMFER -> appendLine("body = _chamfered_prism(${n("length", 42.0)}, ${n("width", 30.0)}, ${n("height", 18.0)}, ${n("distance", 4.0)})")
             BasicCadOperation.SHELL -> {
                 appendLine("outer_$suffix = Part.makeCylinder(${n("radius", 18.0)}, ${n("height", 32.0)})")
                 appendLine("inner_$suffix = Part.makeCylinder(${n("radius", 18.0)} - ${n("thickness", 2.5)}, ${n("height", 32.0)}, App.Vector(0, 0, ${n("thickness", 2.5)}))")
                 appendLine("body = outer_$suffix.cut(inner_$suffix)")
             }
-            BasicCadOperation.DRAFT -> {
-                appendLine("body = Part.makeCone(${n("radius1", 18.0)}, ${n("radius2", 14.0)}, ${n("height", 30.0)})")
-            }
+            BasicCadOperation.DRAFT -> appendLine("body = Part.makeCone(${n("radius1", 18.0)}, ${n("radius2", 14.0)}, ${n("height", 30.0)})")
             BasicCadOperation.RIB -> {
                 appendLine("points_$suffix = [App.Vector(-${n("length", 28.0)}/2.0, 0, _top_z(body)), App.Vector(${n("length", 28.0)}/2.0, 0, _top_z(body)), App.Vector(0, 0, _top_z(body)+${n("height", 18.0)}), App.Vector(-${n("length", 28.0)}/2.0, 0, _top_z(body))]")
                 appendLine("feature_$suffix = Part.Face(Part.makePolygon(points_$suffix)).extrude(App.Vector(0, ${n("thickness", 3.0)}, 0))")
@@ -152,9 +150,41 @@ object BasicCadMacroGenerator {
         }
     }
 
-    private fun pythonString(value: String): String = "'" + value
-        .replace("\\", "\\\\")
-        .replace("'", "\\'") + "'"
+    private fun StringBuilder.appendSketchExtrusion(
+        program: BasicCadProgram,
+        feature: BasicCadFeature,
+        suffix: Int,
+        additive: Boolean
+    ): Boolean {
+        val sketch = feature.sketchId?.let { id -> program.sketches.firstOrNull { it.id == id } } ?: return false
+        val planeId = feature.planeId ?: sketch.planeId
+        val plane = runCatching { program.resolvePlane(planeId) }.getOrNull() ?: return false
+        val depth = (feature.parameters["depth"] ?: 12.0).coerceAtLeast(0.01)
+        fun v(value: CadVector3) = "App.Vector(${value.x.pythonNumber()}, ${value.y.pythonNumber()}, ${value.z.pythonNumber()})"
+        val origin = plane.origin
+        val direction = plane.normal * depth
+        val variable = if (additive) "feature_$suffix" else "tool_$suffix"
+        when (sketch.profile) {
+            CadSketchProfile.CIRCLE -> {
+                val diameter = sketch.parameters["diameter"] ?: feature.parameters["diameter"] ?: 20.0
+                appendLine("$variable = Part.makeCylinder(${(diameter / 2.0).pythonNumber()}, ${depth.pythonNumber()}, ${v(origin)}, ${v(plane.normal)})")
+            }
+            CadSketchProfile.RECTANGLE -> {
+                val width = sketch.parameters["width"] ?: feature.parameters["width"] ?: 30.0
+                val height = sketch.parameters["height"] ?: feature.parameters["length"] ?: 20.0
+                val hx = plane.xAxis * (width / 2.0)
+                val hy = plane.yAxis * (height / 2.0)
+                val points = listOf(origin - hx - hy, origin + hx - hy, origin + hx + hy, origin - hx + hy, origin - hx - hy)
+                appendLine("points_$suffix = [${points.joinToString(", ") { v(it) }}]")
+                appendLine("$variable = Part.Face(Part.makePolygon(points_$suffix)).extrude(${v(direction)})")
+            }
+        }
+        if (additive) appendLine("body = $variable if body is None else body.fuse($variable)")
+        else appendLine("body = _require_body(body).cut($variable)")
+        return true
+    }
+
+    private fun pythonString(value: String): String = "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
     private const val HELPERS = """
 def _require_body(value):
@@ -163,7 +193,6 @@ def _require_body(value):
     return value
 
 def _top_z(value):
-    # El runtime móvil no expone BoundBox todavía. El cuerpo inicial usa 40 mm.
     return 40.0
 
 def _fuse_all(shapes):

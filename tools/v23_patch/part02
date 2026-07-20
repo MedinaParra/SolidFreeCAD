@@ -1,0 +1,355 @@
++                                    val planeId = next.activePlaneId
++                                    commitProgram(
++                                        next,
++                                        false,
++                                        "Plano paralelo a cara creado",
++                                        V23Selection(V23NodeKind.PLANE, planeId)
++                                    )
++                                }
++                            }
++
++                            document?.let { active ->
++                                if (view.tag != active.token) {
++                                    view.tag = active.token
++                                    view.setMesh(active.mesh, active.fit)
++                                }
++                            }
++                            val first = activeProgram?.features?.firstOrNull()
++                            view.setDimensions(
++                                (first?.parameters?.get("depth") ?: 40.0).toFloat(),
++                                (first?.parameters?.get("diameter") ?: 34.93).toFloat()
++                            )
++                            view.setSelectedFace(
++                                if (directCylinder && !loading) selectedFace else EditableCadFace.NONE
++                            )
++                            view.setReferenceFacePickMode(referenceFacePickMode)
++                            val planeHalfSize = ((document?.mesh?.maxDimension ?: 40f) * 0.62f).coerceIn(15f, 5000f)
++                            view.setReferencePlanes(
++                                activeProgram?.planes.orEmpty().map { plane ->
++                                    val frame = plane.frame()
++                                    ReferencePlaneRender(
++                                        id = plane.id,
++                                        originX = frame.origin.x.toFloat(),
++                                        originY = frame.origin.y.toFloat(),
++                                        originZ = frame.origin.z.toFloat(),
++                                        xAxisX = frame.xAxis.x.toFloat(),
++                                        xAxisY = frame.xAxis.y.toFloat(),
++                                        xAxisZ = frame.xAxis.z.toFloat(),
++                                        yAxisX = frame.yAxis.x.toFloat(),
++                                        yAxisY = frame.yAxis.y.toFloat(),
++                                        yAxisZ = frame.yAxis.z.toFloat(),
++                                        halfSize = planeHalfSize,
++                                        selected = selection.kind == V23NodeKind.PLANE && selection.id == plane.id,
++                                        visible = plane.visible
++                                    )
++                                }
++                            )
++                        },
++                        modifier = Modifier.fillMaxSize()
++                    )
++
++                    AnimatedVisibility(
++                        visible = !treeVisible,
++                        modifier = Modifier.align(Alignment.CenterStart),
++                        enter = fadeIn(tween(150)) + slideInHorizontally(initialOffsetX = { -it }),
++                        exit = fadeOut(tween(100)) + slideOutHorizontally(targetOffsetX = { -it })
++                    ) {
++                        V23SideHandle("Árbol", "▶", { treeVisible = true }, right = false)
++                    }
++                    AnimatedVisibility(
++                        visible = !rightVisible,
++                        modifier = Modifier.align(Alignment.CenterEnd),
++                        enter = fadeIn(tween(150)) + slideInHorizontally(initialOffsetX = { it }),
++                        exit = fadeOut(tween(100)) + slideOutHorizontally(targetOffsetX = { it })
++                    ) {
++                        V23SideHandle("Propiedades", "◀", { rightVisible = true }, right = true)
++                    }
++
++                    if (editingSketchId == null && !referenceFacePickMode) {
++                        Surface(
++                            modifier = Modifier
++                                .align(Alignment.BottomCenter)
++                                .padding(bottom = if (drawerVisible) 198.dp else 12.dp),
++                            color = Color.White.copy(alpha = 0.93f),
++                            contentColor = V23Secondary,
++                            shape = RoundedCornerShape(7.dp),
++                            shadowElevation = 2.dp
++                        ) {
++                            Text(
++                                text = if (directCylinder) {
++                                    "Toque una cara y arrastre la flecha amarilla"
++                                } else {
++                                    "Órbita: 1 dedo · paneo: 2 dedos · zoom: pellizco"
++                                },
++                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
++                                color = V23Secondary,
++                                fontSize = 9.sp,
++                                fontWeight = FontWeight.Medium
++                            )
++                        }
++                    }
++
++                    AnimatedVisibility(
++                        visible = referenceFacePickMode,
++                        modifier = Modifier.align(Alignment.TopCenter),
++                        enter = fadeIn(tween(120)),
++                        exit = fadeOut(tween(100))
++                    ) {
++                        Surface(
++                            modifier = Modifier.padding(top = 12.dp),
++                            color = Color(0xFFFFF7D6),
++                            contentColor = V23Text,
++                            shape = RoundedCornerShape(8.dp),
++                            shadowElevation = 5.dp
++                        ) {
++                            Row(
++                                Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
++                                verticalAlignment = Alignment.CenterVertically
++                            ) {
++                                Text(
++                                    "Toque una cara para capturar su plano local",
++                                    color = V23Text,
++                                    fontWeight = FontWeight.Bold,
++                                    fontSize = 10.sp
++                                )
++                                Spacer(Modifier.width(8.dp))
++                                TextButton(onClick = {
++                                    referenceFacePickMode = false
++                                    surface?.setReferenceFacePickMode(false)
++                                    drawerVisible = true
++                                    status = "Captura de cara cancelada"
++                                }) { Text("Cancelar") }
++                            }
++                        }
++                    }
++
++                    AnimatedVisibility(
++                        visible = loading,
++                        modifier = Modifier.align(Alignment.TopCenter),
++                        enter = fadeIn(tween(120)),
++                        exit = fadeOut(tween(120))
++                    ) {
++                        Surface(
++                            modifier = Modifier.padding(top = 12.dp).widthIn(min = 230.dp, max = 360.dp),
++                            color = Color.White,
++                            contentColor = V23Text,
++                            shape = RoundedCornerShape(8.dp),
++                            shadowElevation = 6.dp
++                        ) {
++                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
++                                Text("Recalculando BRep…", color = V23Text, fontWeight = FontWeight.Bold, fontSize = 10.sp)
++                                LinearProgressIndicator(Modifier.fillMaxWidth())
++                            }
++                        }
++                    }
++
++                    error?.let { message ->
++                        V23ErrorCard(
++                            message = message,
++                            onClose = { error = null },
++                            modifier = Modifier.align(Alignment.BottomStart).padding(12.dp)
++                        )
++                    }
++
++                    AnimatedVisibility(
++                        visible = drawerVisible && editingSketchId == null && !referenceFacePickMode,
++                        modifier = Modifier.align(Alignment.BottomCenter),
++                        enter = expandVertically(Alignment.Bottom, v23Tween()) +
++                            slideInVertically(initialOffsetY = { it }, animationSpec = v23Tween()) +
++                            fadeIn(tween(140)),
++                        exit = shrinkVertically(Alignment.Bottom, v23Tween()) +
++                            slideOutVertically(targetOffsetY = { it }, animationSpec = v23Tween()) +
++                            fadeOut(tween(120))
++                    ) {
++                        V23BottomDrawer(
++                            tab = drawerTab,
++                            program = activeProgram,
++                            selectedPlane = selectedPlane,
++                            selectedSketch = selectedSketch ?: activeSketch,
++                            enabled = !loading,
++                            onTab = { drawerTab = it },
++                            onClose = { drawerVisible = false },
++                            onSelectPlane = ::selectPlane,
++                            onCreateOffsetPlane = ::createOffsetPlane,
++                            onCreateFacePlane = ::startFacePlanePick,
++                            onCreateSketch = ::createSketch,
++                            onEditSketch = { sketchId -> editingSketchId = sketchId },
++                            onOperation = ::addOperation
++                        )
++                    }
++
++                    AnimatedVisibility(
++                        visible = !drawerVisible && editingSketchId == null && !referenceFacePickMode,
++                        modifier = Modifier.align(Alignment.BottomCenter),
++                        enter = fadeIn(tween(120)) + slideInVertically(initialOffsetY = { it }),
++                        exit = fadeOut(tween(100)) + slideOutVertically(targetOffsetY = { it })
++                    ) {
++                        Surface(
++                            modifier = Modifier.clickable { drawerVisible = true },
++                            color = V23Accent,
++                            contentColor = Color.White,
++                            shape = RoundedCornerShape(topStart = 9.dp, topEnd = 9.dp),
++                            shadowElevation = 5.dp
++                        ) {
++                            Row(Modifier.padding(horizontal = 16.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
++                                Icon(Icons.Default.KeyboardArrowUp, null, Modifier.size(18.dp))
++                                Spacer(Modifier.width(5.dp))
++                                Text("Herramientas", fontSize = 9.sp, fontWeight = FontWeight.Bold)
++                            }
++                        }
++                    }
++
++                    editingSketchId?.let { id ->
++                        activeProgram?.sketch(id)?.let { sketch ->
++                            V23SketchEditor(
++                                sketch = sketch,
++                                plane = activeProgram.plane(sketch.planeId),
++                                onCancel = {
++                                    editingSketchId = null
++                                    status = "Edición de croquis cancelada"
++                                },
++                                onAccept = { type, values ->
++                                    editingSketchId = null
++                                    val next = activeProgram.updateSketch(sketch.id, type, values)
++                                    commitProgram(
++                                        next,
++                                        false,
++                                        "${sketch.label} actualizado",
++                                        V23Selection(V23NodeKind.SKETCH, sketch.id)
++                                    )
++                                },
++                                modifier = Modifier.align(Alignment.Center)
++                            )
++                        }
++                    }
++                }
++
++                AnimatedVisibility(
++                    visible = rightVisible,
++                    enter = expandHorizontally(Alignment.End, v23Tween()) +
++                        slideInHorizontally(initialOffsetX = { it }, animationSpec = v23Tween()) +
++                        fadeIn(tween(140)),
++                    exit = shrinkHorizontally(Alignment.End, v23Tween()) +
++                        slideOutHorizontally(targetOffsetX = { it }, animationSpec = v23Tween()) +
++                        fadeOut(tween(130))
++                ) {
++                    Row {
++                        VerticalDivider(color = V23Divider)
++                        V23PropertiesPanel(
++                            selection = selection,
++                            document = document,
++                            feature = selectedFeature,
++                            sketch = selectedSketch,
++                            plane = selectedPlane,
++                            enabled = !loading,
++                            onClose = { rightVisible = false },
++                            onApplyFeature = { values ->
++                                selectedFeature?.let { feature ->
++                                    commitProgram(
++                                        history.current.updateFeature(feature.id, values),
++                                        false,
++                                        "${feature.label} recalculado",
++                                        selection
++                                    )
++                                }
++                            },
++                            onSuppress = {
++                                selectedFeature?.let { feature ->
++                                    commitProgram(
++                                        history.current.toggleSuppressed(feature.id),
++                                        false,
++                                        "Estado de ${feature.label} actualizado",
++                                        selection
++                                    )
++                                }
++                            },
++                            onDeleteFeature = {
++                                selectedFeature?.let { feature ->
++                                    if (feature.id == history.current.features.firstOrNull()?.id) {
++                                        error = "La operación base no se puede eliminar"
++                                    } else {
++                                        commitProgram(
++                                            history.current.remove(feature.id),
++                                            false,
++                                            "${feature.label} eliminado"
++                                        )
++                                    }
++                                }
++                            },
++                            onEditSketch = { id -> editingSketchId = id },
++                            onToggleSketch = { id ->
++                                commitProgram(
++                                    history.current.toggleSketchVisibility(id),
++                                    false,
++                                    "Visibilidad del croquis actualizada",
++                                    V23Selection(V23NodeKind.SKETCH, id)
++                                )
++                            },
++                            onUpdatePlaneOffset = { id, offset ->
++                                commitProgram(
++                                    history.current.updatePlaneOffset(id, offset),
++                                    false,
++                                    "Plano desplazado a ${v23Mm(offset)}",
++                                    V23Selection(V23NodeKind.PLANE, id)
++                                )
++                            },
++                            onTogglePlane = { id ->
++                                commitProgram(
++                                    history.current.togglePlaneVisibility(id),
++                                    false,
++                                    "Visibilidad del plano actualizada",
++                                    V23Selection(V23NodeKind.PLANE, id)
++                                )
++                            },
++                            onCreateSketch = { planeId ->
++                                val next = history.current.setActivePlane(planeId).addSketch(CadSketchProfileType.CIRCLE, planeId)
++                                val id = next.activeSketchId
++                                if (id != null) {
++                                    commitProgram(
++                                        next,
++                                        false,
++                                        "${next.sketch(id)?.label ?: "Croquis"} creado",
++                                        V23Selection(V23NodeKind.SKETCH, id)
++                                    ) { editingSketchId = id }
++                                }
++                            },
++                            modifier = Modifier.width(if (compact) 270.dp else 300.dp)
++                        )
++                    }
++                }
++            }
++        }
++    }
++}
++
++@Composable
++private fun V23TopBar(
++    documentName: String,
++    loading: Boolean,
++    treeVisible: Boolean,
++    rightVisible: Boolean,
++    drawerVisible: Boolean,
++    canUndo: Boolean,
++    canRedo: Boolean,
++    onNew: () -> Unit,
++    onOpen: () -> Unit,
++    onUndo: () -> Unit,
++    onRedo: () -> Unit,
++    onTools: () -> Unit,
++    onFit: () -> Unit,
++    onPreset: (CameraPreset) -> Unit,
++    onToggleTree: () -> Unit,
++    onToggleRight: () -> Unit
++) {
++    Surface(color = Color(0xFFF1F3F5), contentColor = V23Text, shadowElevation = 3.dp) {
++        Row(
++            Modifier
++                .fillMaxWidth()
++                .statusBarsPadding()
++                .height(62.dp)
++                .padding(horizontal = 8.dp),
++            verticalAlignment = Alignment.CenterVertically
++        ) {
++            Surface(color = Color(0xFFD32F2F), shape = RoundedCornerShape(4.dp)) {
++                Text(
++                    "SF",

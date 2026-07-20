@@ -2,6 +2,7 @@ package com.example.industrial
 
 import com.example.features.BasicCadOperation
 import com.example.features.BasicCadProgram
+import com.example.features.CadSketchConstraintKind
 import com.example.features.CadSketchPrimitiveKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -21,6 +22,19 @@ class IndustrialCadRecoveryStoreTest {
         assertEquals(source, restored)
         assertEquals("Plano taller", restored.planeSet.planes.last().label)
         assertEquals(12.5, restored.features.last().parameters["depth"] ?: 0.0, 0.0)
+    }
+
+    @Test
+    fun roundTripPreservesMultiEntityConstraints() {
+        val source = BasicCadProgram()
+            .addSketchPrimitive(1L, CadSketchPrimitiveKind.LINE)
+            .addSketchConstraint(1L, CadSketchConstraintKind.HORIZONTAL, 2L)
+            .addSketchConstraint(1L, CadSketchConstraintKind.FIXED, 1L)
+
+        val restored = IndustrialCadRecoveryStore.decodeForTest(IndustrialCadRecoveryStore.encodeForTest(source))
+
+        assertEquals(source, restored)
+        assertEquals(2, restored.sketches.first().constraints.size)
     }
 
     @Test(expected = IllegalArgumentException::class)

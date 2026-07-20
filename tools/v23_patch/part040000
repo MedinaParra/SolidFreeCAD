@@ -1,0 +1,79 @@
++        TextButton(onClick = onSuppress, enabled = enabled, modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 44.dp)) {
++            Icon(if (feature.suppressed) Icons.Default.Visibility else Icons.Default.VisibilityOff, null)
++            Spacer(Modifier.width(5.dp))
++            Text(if (feature.suppressed) "Activar" else "Suprimir", color = V23Accent)
++        }
++        TextButton(onClick = onDelete, enabled = enabled, modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 44.dp)) {
++            Icon(Icons.Default.Delete, null, tint = Color(0xFFB42318))
++            Spacer(Modifier.width(5.dp))
++            Text("Eliminar", color = Color(0xFFB42318))
++        }
++    }
++}
++
++@Composable
++private fun V23SketchProperties(
++    sketch: CadSketch?,
++    enabled: Boolean,
++    onEdit: (Long) -> Unit,
++    onToggle: (Long) -> Unit,
++    modifier: Modifier
++) {
++    if (sketch == null) {
++        Text("Seleccione un croquis", modifier.padding(12.dp), color = V23Secondary, fontSize = 9.sp)
++        return
++    }
++    Column(
++        modifier
++            .verticalScroll(rememberScrollState())
++            .padding(12.dp),
++        verticalArrangement = Arrangement.spacedBy(8.dp)
++    ) {
++        Text(sketch.label, color = V23Text, fontSize = 12.sp, fontWeight = FontWeight.Bold)
++        Text(sketch.profileType.label, color = V23Accent, fontSize = 9.sp, fontWeight = FontWeight.Bold)
++        Text("Plano: ${sketch.planeId}", color = V23Secondary, fontSize = 8.sp)
++        Text(
++            if (sketch.fullyDefined) "TOTALMENTE DEFINIDO" else "SUBDEFINIDO",
++            color = if (sketch.fullyDefined) Color(0xFF1B6E32) else Color(0xFFB54708),
++            fontSize = 7.sp,
++            fontWeight = FontWeight.Bold
++        )
++        HorizontalDivider(color = V23Divider)
++        sketch.parameters.forEach { (name, value) ->
++            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
++                Text(name, color = V23Secondary, fontSize = 8.sp, fontWeight = FontWeight.Bold)
++                Text(v23Number(value), color = V23Text, fontSize = 9.sp)
++            }
++        }
++        Button(
++            onClick = { onEdit(sketch.id) },
++            enabled = enabled,
++            modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 46.dp)
++        ) { Text("Editar croquis", fontSize = 9.sp) }
++        TextButton(
++            onClick = { onToggle(sketch.id) },
++            enabled = enabled,
++            modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 44.dp)
++        ) {
++            Icon(if (sketch.visible) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
++            Spacer(Modifier.width(5.dp))
++            Text(if (sketch.visible) "Ocultar" else "Mostrar", color = V23Accent)
++        }
++    }
++}
++
++@Composable
++private fun V23PlaneProperties(
++    plane: CadReferencePlane?,
++    enabled: Boolean,
++    onUpdateOffset: (Long, Double) -> Unit,
++    onToggle: (Long) -> Unit,
++    onCreateSketch: (Long) -> Unit,
++    modifier: Modifier
++) {
++    if (plane == null) {
++        Text("Seleccione un plano", modifier.padding(12.dp), color = V23Secondary, fontSize = 9.sp)
++        return
++    }
++    val focusManager = LocalFocusManager.current
++    var offsetText by remember(plane.id, plane.offsetMm) { mutableStateOf(v23Number(plane.offsetMm)) }

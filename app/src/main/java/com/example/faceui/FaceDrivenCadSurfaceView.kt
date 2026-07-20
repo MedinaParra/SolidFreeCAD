@@ -10,20 +10,14 @@ import com.example.nativecad.viewer.NativeSceneMesh
 import kotlin.math.abs
 import kotlin.math.sqrt
 
-/**
- * Touch controller for the GPU-driven face editor.
- *
- * Motion events only update the latest requested parameter. A Choreographer
- * callback samples that value once per display frame and asks OpenGL to draw.
- * Compose receives a throttled numeric update, while geometry remains entirely
- * inside the GL path during the gesture.
- */
+/** Touch controller for the GPU-driven face editor and reference-plane picker. */
 class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
     val cadRenderer = GpuFaceDrivenCadRenderer()
 
     var onFaceSelected: ((EditableCadFace) -> Unit)? = null
     var onParameterPreview: ((EditableCadFace, Float) -> Unit)? = null
     var onParameterCommit: ((EditableCadFace, Float) -> Unit)? = null
+    var onPlanarFacePicked: ((PlanarFacePick?) -> Unit)? = null
 
     private var currentLengthMm = 40f
     private var currentDiameterMm = 34.93f
@@ -40,9 +34,9 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
     private var parameterPreviewValue = 0f
     private var targetLengthMm = currentLengthMm
     private var targetDiameterMm = currentDiameterMm
-    private var movement = 0f
     private var frameLoopRunning = false
     private var lastUiPreviewTime = Long.MIN_VALUE
+    private var planarFacePickMode = false
 
     private val density = resources.displayMetrics.density
     private val choreographer: Choreographer by lazy { Choreographer.getInstance() }
@@ -95,6 +89,21 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
         requestRender()
     }
 
+    fun setReferencePlanes(planes: List<ReferencePlaneOverlay>) {
+        cadRenderer.setReferencePlanes(planes)
+        requestRender()
+    }
+
+    fun setPlanarFacePickMode(enabled: Boolean) {
+        planarFacePickMode = enabled
+        if (enabled) {
+            parameterDrag = false
+            stopFrameLoop()
+            cadRenderer.setSelectedFace(EditableCadFace.NONE)
+        }
+        requestRender()
+    }
+
     fun fit(mesh: NativeSceneMesh) {
         cadRenderer.camera.fitTo(mesh)
         requestRender()
@@ -119,10 +128,9 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
                 downY = event.y
                 lastX = event.x
                 lastY = event.y
-                movement = 0f
                 multiTouch = false
-                parameterDragFace = cadRenderer.selectedFace
-                parameterDrag = parameterDragFace != EditableCadFace.NONE &&
+                parameterDragFace = if (planarFacePickMode) EditableCadFace.NONE else cadRenderer.selectedFace
+                parameterDrag = !planarFacePickMode && parameterDragFace != EditableCadFace.NONE &&
                     cadRenderer.hitManipulator(event.x, event.y, 38f * density)
                 parameterStartValue = when (parameterDragFace) {
                     EditableCadFace.TOP -> currentLengthMm
@@ -135,7 +143,6 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
                 lastUiPreviewTime = Long.MIN_VALUE
                 if (parameterDrag) startFrameLoop()
             }
-
             MotionEvent.ACTION_POINTER_DOWN -> {
                 multiTouch = true
                 if (parameterDrag) restoreCommittedPreview()
@@ -144,16 +151,10 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
                 lastCentroidX = centroid.first
                 lastCentroidY = centroid.second
             }
-
             MotionEvent.ACTION_MOVE -> {
                 if (event.pointerCount >= 2) {
                     val centroid = centroid(event)
-                    cadRenderer.camera.pan(
-                        centroid.first - lastCentroidX,
-                        centroid.second - lastCentroidY,
-                        width,
-                        height
-                    )
+                    cadRenderer.camera.pan(centroid.first - lastCentroidX, centroid.second - lastCentroidY, width, height)
                     lastCentroidX = centroid.first
                     lastCentroidY = centroid.second
                     multiTouch = true
@@ -162,14 +163,10 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
                     val screenVector = cadRenderer.manipulatorScreenVector(parameterDragFace)
                     val totalDx = event.x - downX
                     val totalDy = event.y - downY
-                    val projectedPixels = if (screenVector != null) {
-                        totalDx * screenVector[0] + totalDy * screenVector[1]
-                    } else {
-                        when (parameterDragFace) {
-                            EditableCadFace.TOP -> -totalDy
-                            EditableCadFace.SIDE -> totalDx
-                            EditableCadFace.NONE -> 0f
-                        }
+                    val projectedPixels = screenVector?.let { totalDx * it[0] + totalDy * it[1] } ?: when (parameterDragFace) {
+                        EditableCadFace.TOP -> -totalDy
+                        EditableCadFace.SIDE -> totalDx
+                        EditableCadFace.NONE -> 0f
                     }
                     val worldDelta = projectedPixels * cadRenderer.worldPerPixel()
                     parameterPreviewValue = when (parameterDragFace) {
@@ -186,18 +183,15 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
                         onParameterPreview?.invoke(parameterDragFace, parameterPreviewValue)
                         lastUiPreviewTime = event.eventTime
                     }
-                    movement = maxOf(movement, sqrt(totalDx * totalDx + totalDy * totalDy))
                 } else if (!multiTouch && !scaleDetector.isInProgress) {
                     val dx = event.x - lastX
                     val dy = event.y - lastY
-                    movement += abs(dx) + abs(dy)
                     cadRenderer.camera.orbit(dx, dy)
                     lastX = event.x
                     lastY = event.y
                     requestRender()
                 }
             }
-
             MotionEvent.ACTION_POINTER_UP -> {
                 if (event.pointerCount <= 2) {
                     multiTouch = false
@@ -205,7 +199,6 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
                     lastY = event.getY(0)
                 }
             }
-
             MotionEvent.ACTION_UP -> {
                 when {
                     parameterDrag -> {
@@ -215,8 +208,13 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
                         onParameterCommit?.invoke(parameterDragFace, parameterPreviewValue)
                     }
                     !multiTouch && distance(downX, downY, event.x, event.y) < 13f * density -> {
-                        val selected = cadRenderer.pickFace(event.x, event.y)
-                        onFaceSelected?.invoke(selected)
+                        if (planarFacePickMode) {
+                            val picked = cadRenderer.pickPlanarFace(event.x, event.y)
+                            planarFacePickMode = false
+                            onPlanarFacePicked?.invoke(picked)
+                        } else {
+                            onFaceSelected?.invoke(cadRenderer.pickFace(event.x, event.y))
+                        }
                         requestRender()
                     }
                 }
@@ -225,7 +223,6 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
                 multiTouch = false
                 stopFrameLoop()
             }
-
             MotionEvent.ACTION_CANCEL -> {
                 if (parameterDrag) restoreCommittedPreview()
                 parameterDrag = false

@@ -171,20 +171,54 @@ object BasicCadMacroGenerator {
         }
     }
 
-    private fun StringBuilder.appendSketchExtrusion(name: String, sketch: CadSketch?, depth: String, featureParameters: Map<String, Double>) {
-        val primitive = sketch?.primitives?.firstOrNull()
-        val parameters = primitive?.parameters.orEmpty()
-        fun value(key: String, fallback: Double): String = (parameters[key] ?: featureParameters[key] ?: fallback).pythonNumber()
-        when (primitive?.kind) {
-            CadSketchPrimitiveKind.CIRCLE -> appendLine("$name = Part.makeCylinder(${value("diameter", 20.0)}/2.0, $depth)")
-            CadSketchPrimitiveKind.RECTANGLE -> appendLine("$name = Part.makeBox(${value("width", 30.0)},${value("height", 20.0)},$depth,App.Vector(-${value("width", 30.0)}/2.0,-${value("height", 20.0)}/2.0,0))")
-            CadSketchPrimitiveKind.POLYGON -> appendLine("$name = _polygon_prism(${value("radius", 12.0)},int(${value("sides", 6.0)}),$depth)")
-            CadSketchPrimitiveKind.LINE,
-            CadSketchPrimitiveKind.ARC -> appendLine("raise RuntimeError('La extrusión requiere un croquis cerrado')")
-            null -> {
-                if ("diameter" in featureParameters) appendLine("$name = Part.makeCylinder(${(featureParameters["diameter"] ?: 34.93).pythonNumber()}/2.0,$depth)")
-                else appendLine("$name = Part.makeBox(${(featureParameters["length"] ?: 30.0).pythonNumber()},${(featureParameters["width"] ?: 22.0).pythonNumber()},$depth)")
+    private fun StringBuilder.appendSketchExtrusion(
+        name: String,
+        sketch: CadSketch?,
+        depth: String,
+        featureParameters: Map<String, Double>
+    ) {
+        val closed = sketch?.closedPrimitives.orEmpty()
+        if (sketch != null) {
+            if (closed.isEmpty()) {
+                appendLine("raise RuntimeError('La extrusión requiere al menos una región cerrada')")
+                return
             }
+            val parts = ArrayList<String>(closed.size)
+            closed.forEachIndexed { index, primitive ->
+                val part = "${name}_region_${index + 1}"
+                appendClosedPrimitiveExtrusion(part, primitive, depth)
+                parts += part
+            }
+            appendLine("$name = _fuse_all([${parts.joinToString(",")}])")
+            return
+        }
+
+        if ("diameter" in featureParameters) {
+            appendLine("$name = Part.makeCylinder(${(featureParameters["diameter"] ?: 34.93).pythonNumber()}/2.0,$depth)")
+        } else {
+            appendLine("$name = Part.makeBox(${(featureParameters["length"] ?: 30.0).pythonNumber()},${(featureParameters["width"] ?: 22.0).pythonNumber()},$depth)")
+        }
+    }
+
+    private fun StringBuilder.appendClosedPrimitiveExtrusion(
+        name: String,
+        primitive: CadSketchPrimitive,
+        depth: String
+    ) {
+        val parameters = primitive.parameters
+        fun value(key: String, fallback: Double): String = (parameters[key] ?: fallback).pythonNumber()
+        when (primitive.kind) {
+            CadSketchPrimitiveKind.CIRCLE -> appendLine(
+                "$name = Part.makeCylinder(${value("diameter", 20.0)}/2.0,$depth,App.Vector(${value("centerX", 0.0)},${value("centerY", 0.0)},0))"
+            )
+            CadSketchPrimitiveKind.RECTANGLE -> appendLine(
+                "$name = Part.makeBox(${value("width", 30.0)},${value("height", 20.0)},$depth,App.Vector(${value("centerX", 0.0)}-${value("width", 30.0)}/2.0,${value("centerY", 0.0)}-${value("height", 20.0)}/2.0,0))"
+            )
+            CadSketchPrimitiveKind.POLYGON -> appendLine(
+                "$name = _polygon_prism(${value("radius", 12.0)},int(${value("sides", 6.0)}),$depth,${value("centerX", 0.0)},${value("centerY", 0.0)})"
+            )
+            CadSketchPrimitiveKind.LINE,
+            CadSketchPrimitiveKind.ARC -> error("La entidad ${primitive.kind} no define una región cerrada")
         }
     }
 
@@ -234,13 +268,13 @@ def _pipe_polyline(points, radius):
         pieces.append(Part.makeSphere(radius, point))
     return _fuse_all(pieces)
 
-def _polygon_prism(radius, sides, height):
+def _polygon_prism(radius, sides, height, cx=0.0, cy=0.0):
     if sides < 3:
         raise ValueError('Un polígono requiere al menos tres lados')
     points = []
     for i in range(sides):
         angle = 2.0 * math.pi * i / sides
-        points.append(App.Vector(radius*math.cos(angle), radius*math.sin(angle), 0))
+        points.append(App.Vector(cx+radius*math.cos(angle), cy+radius*math.sin(angle), 0))
     points.append(points[0])
     return Part.Face(Part.makePolygon(points)).extrude(App.Vector(0,0,height))
 

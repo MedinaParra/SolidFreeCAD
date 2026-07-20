@@ -1,0 +1,71 @@
++                    Text(document?.format ?: "—", color = V23Accent, fontSize = 8.sp, fontWeight = FontWeight.Bold)
++                    Text(document?.summary ?: "Seleccione un elemento", color = V23Secondary, fontSize = 8.sp)
++                }
++            }
++        }
++    }
++}
++
++@Composable
++private fun V23FeatureProperties(
++    feature: BasicCadFeature?,
++    enabled: Boolean,
++    onApply: (Map<String, Double>) -> Unit,
++    onSuppress: () -> Unit,
++    onDelete: () -> Unit,
++    modifier: Modifier
++) {
++    if (feature == null) {
++        Text("Seleccione una operación", modifier.padding(12.dp), color = V23Secondary, fontSize = 9.sp)
++        return
++    }
++    val focusManager = LocalFocusManager.current
++    var draft by remember(feature.id, feature.parameters) {
++        mutableStateOf(feature.parameters.mapValues { v23Number(it.value) })
++    }
++    val validation = remember(draft) { v23ValidateParameters(draft) }
++    val changed = remember(draft, feature.parameters) {
++        validation.error == null && !v23MapsEqual(validation.values, feature.parameters)
++    }
++    Column(
++        modifier
++            .verticalScroll(rememberScrollState())
++            .padding(11.dp),
++        verticalArrangement = Arrangement.spacedBy(8.dp)
++    ) {
++        Text(feature.label, color = V23Text, fontSize = 12.sp, fontWeight = FontWeight.Bold)
++        Text(feature.operation.description, color = V23Secondary, fontSize = 8.sp)
++        feature.sketchId?.let { Text("Croquis asociado: $it", color = V23Muted, fontSize = 7.sp) }
++        feature.planeId?.let { Text("Plano asociado: $it", color = V23Muted, fontSize = 7.sp) }
++        Text(
++            if (feature.operation.generalTopology) "OPERACIÓN PARAMÉTRICA" else "OPERACIÓN BÁSICA BETA",
++            color = if (feature.operation.generalTopology) Color(0xFF1B6E32) else Color(0xFFB54708),
++            fontSize = 7.sp,
++            fontWeight = FontWeight.Bold
++        )
++        HorizontalDivider(color = V23Divider)
++        draft.forEach { (key, value) ->
++            OutlinedTextField(
++                value = value,
++                onValueChange = { next -> draft = draft + (key to v23Numeric(next)) },
++                enabled = enabled,
++                label = { Text(key, color = V23Secondary) },
++                textStyle = LocalTextStyle.current.copy(color = V23Text, fontWeight = FontWeight.Medium),
++                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
++                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
++                singleLine = true,
++                isError = validation.error != null,
++                modifier = Modifier.fillMaxWidth()
++            )
++        }
++        validation.error?.let { Text(it, color = Color(0xFFB42318), fontSize = 8.sp, fontWeight = FontWeight.Bold) }
++        if (changed) Text("Cambios sin aplicar", color = Color(0xFF8A4B08), fontSize = 8.sp, fontWeight = FontWeight.Bold)
++        Button(
++            onClick = { focusManager.clearFocus(); onApply(validation.values) },
++            enabled = enabled && changed,
++            modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 46.dp)
++        ) {
++            Icon(Icons.Default.Check, null, Modifier.size(18.dp))
++            Spacer(Modifier.width(6.dp))
++            Text("Aplicar y recalcular", fontSize = 9.sp)
++        }

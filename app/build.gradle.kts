@@ -84,17 +84,16 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.tooling)
 }
 
-val generatedV27Directory = layout.buildDirectory.dir("generated/source/v27")
+val generatedV27Directory = file("build/generated/source/v27")
 val generateV27Sources = tasks.register("generateV27Sources") {
   val first = file("src/main/v27gen/SolidFreeCadWorkbenchActivityV27.part1")
   val second = file("src/main/v27gen/SolidFreeCadWorkbenchActivityV27.part2")
-  val output = generatedV27Directory.map { it.file("com/example/faceui/SolidFreeCadWorkbenchActivityV27.kt") }
+  val output = file("$generatedV27Directory/com/example/faceui/SolidFreeCadWorkbenchActivityV27.kt")
   inputs.files(first, second)
   outputs.file(output)
   doLast {
-    val target = output.get().asFile
-    target.parentFile.mkdirs()
-    target.writeText(first.readText() + second.readText())
+    output.parentFile.mkdirs()
+    output.writeText(first.readText() + second.readText())
   }
 }
 android.sourceSets.getByName("main").java.srcDir(generatedV27Directory)

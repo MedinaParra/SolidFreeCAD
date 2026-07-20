@@ -3,6 +3,7 @@ package com.example.faceui
 import com.example.nativecad.viewer.NativeSceneMesh
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sqrt
 
 enum class CadViewportSelectionModeV27(val label: String) { AUTO("Auto"), FACE("Cara"), EDGE("Arista"), VERTEX("Vértice"), LOOP("Bucle") }
@@ -83,17 +84,27 @@ class CadBRepTopologyV27(private val mesh: NativeSceneMesh) {
     fun pickEdge(origin: FloatArray, direction: FloatArray, tolerance: Float): CadViewportEdgeSelectionV27? {
         val d=norm(direction); val front=hit(origin,d)?.t?:Float.POSITIVE_INFINITY
         var best: Pair<Edge,RayEdge>?=null
-        featureEdgeIds.forEach { id -> val e=edges[id]; val a=p(e.key.a); val b=p(e.key.b); val r=raySegment(origin,d,a,b)
-            if(r.rayT>EPS && r.distance<=tolerance && r.rayT<=front+tolerance*3.5f && (best==null||r.distance<best!!.second.distance)) best=e to r }
+        featureEdgeIds.forEach { id ->
+            val e=edges[id]; val a=p(e.key.a); val b=p(e.key.b); val r=raySegment(origin,d,a,b)
+            val previous=best?.second
+            val improves=previous==null || r.distance<previous.distance-EPS ||
+                (abs(r.distance-previous.distance)<=EPS && r.rayT<previous.rayT)
+            if(r.rayT>EPS && r.distance<=tolerance && r.rayT<=front+tolerance*3.5f && improves) best=e to r
+        }
         val pair=best?:return null; val e=pair.first; val a=p(e.key.a); val b=p(e.key.b)
         return CadViewportEdgeSelectionV27("MeshEdge-${e.id}-${e.key.a}-${e.key.b}",e.id,e.key.a,e.key.b,a,b,pair.second.point,len(sub(b,a)),e.boundary,e.sharp)
     }
 
     fun pickVertex(origin: FloatArray, direction: FloatArray, tolerance: Float): CadViewportVertexSelectionV27? {
         val d=norm(direction); val front=hit(origin,d)?.t?:Float.POSITIVE_INFINITY
-        var best=-1; var bestDist=Float.POSITIVE_INFINITY
-        featureByVertex.keys.forEach { v -> val q=p(v); val t=dot(sub(q,origin),d); if(t<=EPS||t>front+tolerance*3.5f)return@forEach
-            val dist=len(sub(q,add(origin,mul(d,t)))); if(dist<=tolerance&&dist<bestDist){best=v;bestDist=dist} }
+        var best=-1; var bestDist=Float.POSITIVE_INFINITY; var bestRayT=Float.POSITIVE_INFINITY
+        featureByVertex.keys.forEach { v ->
+            val q=p(v); val t=dot(sub(q,origin),d)
+            if(t<=EPS||t>front+tolerance*3.5f)return@forEach
+            val dist=len(sub(q,add(origin,mul(d,t))))
+            val improves=dist<bestDist-EPS || (abs(dist-bestDist)<=EPS && t<bestRayT)
+            if(dist<=tolerance && improves){best=v;bestDist=dist;bestRayT=t}
+        }
         return if(best<0)null else CadViewportVertexSelectionV27("MeshVertex-$best",best,p(best),featureByVertex[best]?.size?:0)
     }
 

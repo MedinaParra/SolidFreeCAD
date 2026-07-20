@@ -13,6 +13,7 @@ import kotlin.math.sqrt
 /** Touch controller for the GPU-driven face editor and reference-plane picker. */
 class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
     val cadRenderer = GpuFaceDrivenCadRenderer()
+    private val referenceRenderer = ReferencePlaneCompositeRenderer(cadRenderer)
 
     var onFaceSelected: ((EditableCadFace) -> Unit)? = null
     var onParameterPreview: ((EditableCadFace, Float) -> Unit)? = null
@@ -50,27 +51,24 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
         }
     }
 
-    private val scaleDetector = ScaleGestureDetector(
-        context,
-        object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-            override fun onScale(detector: ScaleGestureDetector): Boolean {
-                cadRenderer.camera.zoom(detector.scaleFactor)
-                requestRender()
-                return true
-            }
+    private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScale(detector: ScaleGestureDetector): Boolean {
+            cadRenderer.camera.zoom(detector.scaleFactor)
+            requestRender()
+            return true
         }
-    )
+    })
 
     init {
         setEGLContextClientVersion(2)
         preserveEGLContextOnPause = true
-        setRenderer(cadRenderer)
+        setRenderer(referenceRenderer)
         renderMode = RENDERMODE_WHEN_DIRTY
     }
 
     fun setMesh(mesh: NativeSceneMesh, fitCamera: Boolean = true) {
         stopFrameLoop()
-        cadRenderer.setMesh(mesh)
+        referenceRenderer.setMesh(mesh)
         if (fitCamera) cadRenderer.camera.fitTo(mesh)
         requestRender()
     }
@@ -90,7 +88,7 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
     }
 
     fun setReferencePlanes(planes: List<ReferencePlaneOverlay>) {
-        cadRenderer.setReferencePlanes(planes)
+        referenceRenderer.setReferencePlanes(planes)
         requestRender()
     }
 
@@ -130,8 +128,7 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
                 lastY = event.y
                 multiTouch = false
                 parameterDragFace = if (planarFacePickMode) EditableCadFace.NONE else cadRenderer.selectedFace
-                parameterDrag = !planarFacePickMode && parameterDragFace != EditableCadFace.NONE &&
-                    cadRenderer.hitManipulator(event.x, event.y, 38f * density)
+                parameterDrag = !planarFacePickMode && parameterDragFace != EditableCadFace.NONE && cadRenderer.hitManipulator(event.x, event.y, 38f * density)
                 parameterStartValue = when (parameterDragFace) {
                     EditableCadFace.TOP -> currentLengthMm
                     EditableCadFace.SIDE -> currentDiameterMm
@@ -209,7 +206,7 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
                     }
                     !multiTouch && distance(downX, downY, event.x, event.y) < 13f * density -> {
                         if (planarFacePickMode) {
-                            val picked = cadRenderer.pickPlanarFace(event.x, event.y)
+                            val picked = referenceRenderer.pickPlanarFace(event.x, event.y)
                             planarFacePickMode = false
                             onPlanarFacePicked?.invoke(picked)
                         } else {
@@ -236,7 +233,7 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
 
     override fun onDetachedFromWindow() {
         stopFrameLoop()
-        queueEvent { cadRenderer.release() }
+        queueEvent { referenceRenderer.release() }
         super.onDetachedFromWindow()
     }
 

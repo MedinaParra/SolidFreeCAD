@@ -24,7 +24,9 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
     var onFaceSelected: ((EditableCadFace) -> Unit)? = null
     var onParameterPreview: ((EditableCadFace, Float) -> Unit)? = null
     var onParameterCommit: ((EditableCadFace, Float) -> Unit)? = null
+    var onReferenceFacePicked: ((PickedFaceFrame?) -> Unit)? = null
 
+    private var referenceFacePickMode = false
     private var currentLengthMm = 40f
     private var currentDiameterMm = 34.93f
     private var downX = 0f
@@ -93,6 +95,19 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
     fun setSelectedFace(face: EditableCadFace) {
         cadRenderer.setSelectedFace(face)
         requestRender()
+    }
+
+    fun setReferencePlanes(planes: List<ReferencePlaneRender>) {
+        cadRenderer.setReferencePlanes(planes)
+        requestRender()
+    }
+
+    fun setReferenceFacePickMode(enabled: Boolean) {
+        referenceFacePickMode = enabled
+        if (enabled) {
+            setSelectedFace(EditableCadFace.NONE)
+            restoreCommittedPreview()
+        }
     }
 
     fun fit(mesh: NativeSceneMesh) {
@@ -215,8 +230,14 @@ class FaceDrivenCadSurfaceView(context: Context) : GLSurfaceView(context) {
                         onParameterCommit?.invoke(parameterDragFace, parameterPreviewValue)
                     }
                     !multiTouch && distance(downX, downY, event.x, event.y) < 13f * density -> {
-                        val selected = cadRenderer.pickFace(event.x, event.y)
-                        onFaceSelected?.invoke(selected)
+                        if (referenceFacePickMode) {
+                            val frame = cadRenderer.pickReferenceFace(event.x, event.y)
+                            referenceFacePickMode = false
+                            onReferenceFacePicked?.invoke(frame)
+                        } else {
+                            val selected = cadRenderer.pickFace(event.x, event.y)
+                            onFaceSelected?.invoke(selected)
+                        }
                         requestRender()
                     }
                 }

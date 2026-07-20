@@ -50,6 +50,12 @@
             android:theme="@style/Theme.MyApplication" />
         <activity
             android:name="com.example.faceui.SolidFreeCadWorkbenchActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/Theme.MyApplication" />
+        <activity
+            android:name="com.example.faceui.SolidFreeCadWorkbenchActivityV21"
             android:exported="true"
             android:label="@string/app_name"
             android:launchMode="singleTop"
@@ -76,14 +82,14 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\\.FCMacro" />
-                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\\.fcmacro" />
-                <data android:scheme="file" android:mimeType="*/*" android:pathPattern=".*\\.FCMacro" />
-                <data android:scheme="file" android:mimeType="*/*" android:pathPattern=".*\\.fcmacro" />
-                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\\.FCStd" />
-                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\\.fcstd" />
-                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\\.step" />
-                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\\.stp" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.FCMacro" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.fcmacro" />
+                <data android:scheme="file" android:mimeType="*/*" android:pathPattern=".*\.FCMacro" />
+                <data android:scheme="file" android:mimeType="*/*" android:pathPattern=".*\.fcmacro" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.FCStd" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.fcstd" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.step" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.stp" />
             </intent-filter>
         </activity>
     </application>

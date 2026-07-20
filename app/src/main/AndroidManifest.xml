@@ -1,27 +1,64 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-feature android:glEsVersion="0x00020000" android:required="true" />
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
+        android:extractNativeLibs="true"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.MyApplication">
+        <activity android:name=".MainActivity" android:exported="false" android:label="@string/app_name" android:theme="@style/Theme.MyApplication" />
+        <activity android:name=".HybridMainActivity" android:exported="false" android:label="@string/app_name" android:theme="@style/Theme.MyApplication" />
+        <activity android:name=".NativeHybridActivityV2" android:exported="false" android:label="@string/app_name" android:theme="@style/Theme.MyApplication" />
+        <activity android:name=".UnifiedSolidFreeCadActivity" android:exported="false" android:label="@string/app_name" android:screenOrientation="sensorLandscape" android:theme="@style/Theme.MyApplication" />
+        <activity android:name=".ParametricSolidFreeCadActivity" android:exported="false" android:label="@string/app_name" android:screenOrientation="sensorLandscape" android:theme="@style/Theme.MyApplication" />
+        <activity android:name="com.example.faceui.FaceDrivenSolidFreeCadActivity" android:exported="false" android:label="@string/app_name" android:screenOrientation="sensorLandscape" android:theme="@style/Theme.MyApplication" />
+        <activity android:name="com.example.faceui.SolidFreeCadWorkbenchActivity" android:exported="false" android:label="@string/app_name" android:screenOrientation="sensorLandscape" android:theme="@style/Theme.MyApplication" />
+        <activity android:name="com.example.faceui.SolidFreeCadWorkbenchActivityV21" android:exported="false" android:label="@string/app_name" android:screenOrientation="sensorLandscape" android:theme="@style/Theme.MyApplication" />
+        <activity android:name="com.example.faceui.SolidFreeCadWorkbenchActivityV22" android:exported="false" android:label="@string/app_name" android:screenOrientation="sensorLandscape" android:theme="@style/Theme.MyApplication" />
+        <activity android:name="com.example.faceui.SolidFreeCadWorkbenchActivityV23" android:exported="false" android:label="@string/app_name" android:screenOrientation="sensorLandscape" android:theme="@style/Theme.MyApplication" />
+        <activity android:name="com.example.faceui.SolidFreeCadWorkbenchActivityV24" android:exported="false" android:label="@string/app_name" android:screenOrientation="sensorLandscape" android:theme="@style/Theme.MyApplication" />
+        <activity android:name="com.example.faceui.SolidFreeCadWorkbenchActivityV25" android:exported="false" android:label="@string/app_name" android:screenOrientation="sensorLandscape" android:theme="@style/Theme.MyApplication" />
+        <activity android:name="com.example.faceui.SolidFreeCadWorkbenchActivityV26" android:exported="false" android:label="@string/app_name" android:screenOrientation="sensorLandscape" android:theme="@style/Theme.MyApplication" />
         <activity
-            android:name=".MainActivity"
+            android:name="com.example.faceui.SolidFreeCadWorkbenchActivityV27"
             android:exported="true"
             android:label="@string/app_name"
+            android:launchMode="singleTop"
+            android:screenOrientation="sensorLandscape"
             android:theme="@style/Theme.MyApplication">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/x-freecad-macro" />
+                <data android:mimeType="application/x-extension-fcmacro" />
+                <data android:mimeType="text/x-python" />
+                <data android:mimeType="application/x-python-code" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.FCMacro" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.fcmacro" />
+                <data android:scheme="file" android:mimeType="*/*" android:pathPattern=".*\.FCMacro" />
+                <data android:scheme="file" android:mimeType="*/*" android:pathPattern=".*\.fcmacro" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.FCStd" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.fcstd" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.step" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.stp" />
             </intent-filter>
         </activity>
     </application>
-
 </manifest>

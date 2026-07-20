@@ -159,15 +159,48 @@ data class BasicCadProgram(
 
     fun updateSketchPrimitive(sketchId: Long, primitiveId: Long, parameters: Map<String, Double>): BasicCadProgram {
         require(parameters.values.all { it.isFinite() })
+        return updateSketch(sketchId) { it.updatePrimitive(primitiveId, parameters) }
+    }
+
+    fun addSketchPrimitive(
+        sketchId: Long,
+        kind: CadSketchPrimitiveKind,
+        parameters: Map<String, Double> = kind.defaultSketchParameters()
+    ): BasicCadProgram = updateSketch(sketchId) { it.addPrimitive(kind, parameters) }
+
+    fun removeSketchPrimitive(sketchId: Long, primitiveId: Long): BasicCadProgram =
+        updateSketch(sketchId) { it.removePrimitive(primitiveId) }
+
+    fun addSketchConstraint(
+        sketchId: Long,
+        kind: CadSketchConstraintKind,
+        firstPrimitiveId: Long,
+        secondPrimitiveId: Long? = null,
+        firstPoint: Int = 0,
+        secondPoint: Int = 0
+    ): BasicCadProgram = updateSketch(sketchId) {
+        it.addConstraint(kind, firstPrimitiveId, secondPrimitiveId, firstPoint, secondPoint)
+    }
+
+    fun removeSketchConstraint(sketchId: Long, constraintId: Long): BasicCadProgram =
+        updateSketch(sketchId) { it.removeConstraint(constraintId) }
+
+    fun replaceSketch(updated: CadSketch): BasicCadProgram {
+        require(sketches.any { it.id == updated.id }) { "Croquis ${updated.id} no encontrado" }
+        planeSet.plane(updated.planeId)
         return copy(
-            sketches = sketches.map { sketch ->
-                if (sketch.id != sketchId) sketch
-                else sketch.copy(
-                    primitives = sketch.primitives.map { primitive ->
-                        if (primitive.id == primitiveId) primitive.copy(parameters = parameters) else primitive
-                    }
-                )
-            },
+            sketches = sketches.map { if (it.id == updated.id) updated.solveConstraints() else it },
+            activePlaneId = updated.planeId,
+            activeSketchId = updated.id,
+            revision = revision + 1L
+        )
+    }
+
+    private fun updateSketch(sketchId: Long, transform: (CadSketch) -> CadSketch): BasicCadProgram {
+        require(sketches.any { it.id == sketchId }) { "Croquis $sketchId no encontrado" }
+        return copy(
+            sketches = sketches.map { if (it.id == sketchId) transform(it) else it },
+            activeSketchId = sketchId,
             revision = revision + 1L
         )
     }
@@ -180,11 +213,15 @@ data class BasicCadProgram(
         val updatedSketches = first.sketchId?.let { sketchId ->
             sketches.map { sketch ->
                 if (sketch.id != sketchId) sketch
-                else sketch.copy(primitives = sketch.primitives.map { primitive ->
-                    if (primitive.kind == CadSketchPrimitiveKind.CIRCLE) {
-                        primitive.copy(parameters = primitive.parameters + ("diameter" to diameter))
-                    } else primitive
-                })
+                else {
+                    var updatedCircle = false
+                    sketch.copy(primitives = sketch.primitives.map { primitive ->
+                        if (!updatedCircle && primitive.kind == CadSketchPrimitiveKind.CIRCLE) {
+                            updatedCircle = true
+                            primitive.copy(parameters = primitive.parameters + ("diameter" to diameter))
+                        } else primitive
+                    })
+                }
             }
         } ?: sketches
         return copy(features = listOf(updatedFeature) + features.drop(1), sketches = updatedSketches, revision = revision + 1L)

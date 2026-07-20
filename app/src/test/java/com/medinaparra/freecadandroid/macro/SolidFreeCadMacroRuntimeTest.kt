@@ -28,6 +28,23 @@ class SolidFreeCadMacroRuntimeTest {
         assertTrue(normalized.contains("Part.makeBox"))
     }
 
+    @Test
+    fun prependsDesktopCompatibleVectorRotationSupport() {
+        val prepared = SolidFreeCadMacroRuntime.prepareSource(
+            """
+                import FreeCAD as App
+                normal = App.Vector(0, 1, 0)
+                normal.normalize()
+                rotation = App.Rotation(App.Vector(0, 0, 1), normal)
+            """.trimIndent()
+        )
+
+        assertTrue(prepared.contains("Vector.normalize = _solidfreecad_vector_normalize"))
+        assertTrue(prepared.contains("Rotation.__init__ = _solidfreecad_rotation_init"))
+        assertTrue(prepared.contains("rotation = App.Rotation(App.Vector(0, 0, 1), normal)"))
+        assertTrue(prepared.indexOf("_solidfreecad_vector_rotation_compat") < prepared.indexOf("rotation = App.Rotation"))
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun rejectsNullBytes() {
         SolidFreeCadMacroRuntime.normalizeSource("import Part\u0000")

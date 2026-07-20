@@ -1,6 +1,7 @@
 package com.medinaparra.freecadandroid.macro
 
 import android.content.Context
+import com.example.industrial.IndustrialCadDiagnostics
 import com.medinaparra.freecadandroid.nativebridge.NativeCadBridge
 import com.medinaparra.freecadandroid.nativebridge.NativeMacroScene
 import com.medinaparra.freecadandroid.runtime.PythonRuntimeInstaller
@@ -19,13 +20,22 @@ object SolidFreeCadMacroRuntime {
         angularDeflection: Double = 0.30
     ): NativeMacroScene {
         val prepared = prepareSource(sourceCode)
-        val installed = PythonRuntimeInstaller.install(context.applicationContext)
-        return NativeCadBridge.runPythonMacro(
-            pythonHome = installed.home.absolutePath,
-            sourceCode = prepared,
-            linearDeflection = linearDeflection,
-            angularDeflection = angularDeflection
-        )
+        return runCatching {
+            val installed = PythonRuntimeInstaller.install(context.applicationContext)
+            NativeCadBridge.runPythonMacro(
+                pythonHome = installed.home.absolutePath,
+                sourceCode = prepared,
+                linearDeflection = linearDeflection,
+                angularDeflection = angularDeflection
+            )
+        }.getOrElse { cause ->
+            val failure = IndustrialCadDiagnostics.failure(
+                context.applicationContext,
+                operation = "ejecución FreeCAD",
+                throwable = cause
+            )
+            throw IndustrialMacroException(failure.userMessage, failure.code, cause)
+        }
     }
 
     fun executeFile(
@@ -156,3 +166,9 @@ object SolidFreeCadMacroRuntime {
             _solidfreecad_app._solidfreecad_vector_rotation_compat = True
     """.trimIndent()
 }
+
+class IndustrialMacroException(
+    val userMessage: String,
+    val diagnosticCode: String,
+    cause: Throwable
+) : IllegalStateException("$userMessage Código $diagnosticCode", cause)

@@ -11,8 +11,8 @@ android {
     applicationId = "com.aistudio.solidmacro.fctech"
     minSdk = 24
     targetSdk = 36
-    versionCode = 16
-    versionName = "2.4-industrial-hardening"
+    versionCode = 17
+    versionName = "2.5-brep-selection-planes"
 
     ndk {
       abiFilters += listOf("armeabi-v7a", "arm64-v8a")

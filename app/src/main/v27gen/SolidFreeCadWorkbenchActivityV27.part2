@@ -1,0 +1,248 @@
+val first = program?.features?.firstOrNull()
+view.setDimensions((first?.parameters?.get("depth") ?: 40.0).toFloat(), (first?.parameters?.get("diameter") ?: 34.93).toFloat())
+view.setSelectionMode(selectionMode)
+view.setDirectEditingEnabled(!loading && directCylinder)
+view.setSelectedFace(if (!loading && directCylinder) selectedFace else EditableCadFace.NONE)
+view.setReferencePlanes(program?.planeSet?.planes?.map { plane ->
+CadViewportPlane(
+id = plane.id,
+origin = floatArrayOf(plane.origin.x.toFloat(), plane.origin.y.toFloat(), plane.origin.z.toFloat()),
+normal = floatArrayOf(plane.normalizedNormal.x.toFloat(), plane.normalizedNormal.y.toFloat(), plane.normalizedNormal.z.toFloat()),
+visible = plane.visible,
+active = plane.id == program.activePlaneId
+)
+}.orEmpty())
+},
+modifier = Modifier.fillMaxSize()
+)
+if (sketchEditingId == null) {
+V27SelectionFilterBar(
+mode = selectionMode,
+enabled = !loading && document != null,
+onMode = { mode ->
+selectionMode = mode
+selectedTopology = null
+selectedSurface = null
+selectedFace = EditableCadFace.NONE
+surface?.clearTopologySelection()
+surface?.setSelectedFace(EditableCadFace.NONE)
+status = "Filtro de selección: ${mode.label}"
+},
+onClear = {
+selectedTopology = null
+selectedSurface = null
+selectedFace = EditableCadFace.NONE
+surface?.clearTopologySelection()
+surface?.setSelectedFace(EditableCadFace.NONE)
+status = "Selección limpiada"
+},
+modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp)
+)
+}
+if (!treeVisible) V24EdgeHandle("Árbol", "▶", { treeVisible = true }, Modifier.align(Alignment.CenterStart), false)
+if (!propertiesVisible) V24EdgeHandle("Propiedades", "◀", { propertiesVisible = true }, Modifier.align(Alignment.CenterEnd), true)
+sketchEditingId?.let { id ->
+program?.sketches?.firstOrNull { it.id == id }?.let { sketch ->
+V26MultiEntitySketchEditor(
+sketch = sketch,
+onCancel = { sketchEditingId = null },
+onAccept = { updatedSketch ->
+commit(history.current.replaceSketch(updatedSketch), message = "${updatedSketch.label} actualizado")
+sketchEditingId = null
+},
+modifier = Modifier.fillMaxSize()
+)
+}
+}
+if (loading) V24Loading(Modifier.align(Alignment.TopCenter).padding(top = 12.dp))
+error?.let { V24Error(it, { error = null }, Modifier.align(Alignment.BottomStart).padding(12.dp)) }
+}
+AnimatedVisibility(
+visible = propertiesVisible,
+enter = expandHorizontally(expandFrom = Alignment.End, animationSpec = tween(V24AnimMs, easing = FastOutSlowInEasing)) + fadeIn(),
+exit = shrinkHorizontally(shrinkTowards = Alignment.End, animationSpec = tween(V24AnimMs, easing = FastOutSlowInEasing)) + fadeOut()
+) {
+V27Properties(
+topology = selectedTopology,
+feature = selectedFeature,
+plane = selectedPlane,
+sketch = selectedSketch,
+program = program,
+enabled = !loading,
+onApplyFeature = { feature, values -> commit(history.current.updateFeature(feature.id, values), message = "${feature.label} recalculado") },
+onToggleFeature = { feature -> commit(history.current.toggleSuppressed(feature.id), message = "Estado de ${feature.label} actualizado") },
+onEditSketch = { sketchEditingId = it.id },
+onSelectPlane = { id -> commit(history.current.selectPlane(id), message = "Plano activo actualizado") },
+onTogglePlane = { id -> commit(history.current.togglePlaneVisibility(id), message = "Visibilidad del plano actualizada") },
+onCreateOffset = { planeDialog = V24PlaneDialogMode.OFFSET },
+onCreateFace = { planeDialog = V24PlaneDialogMode.FACE },
+onClose = { propertiesVisible = false },
+modifier = Modifier.width(285.dp)
+)
+}
+}
+AnimatedVisibility(
+visible = trayVisible && sketchEditingId == null,
+modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
+enter = expandVertically(expandFrom = Alignment.Bottom, animationSpec = tween(V24AnimMs, easing = FastOutSlowInEasing)) + fadeIn(),
+exit = shrinkVertically(shrinkTowards = Alignment.Bottom, animationSpec = tween(V24AnimMs, easing = FastOutSlowInEasing)) + fadeOut()
+) {
+V24BottomTray(
+tab = trayTab,
+program = program,
+enabled = !loading && program != null,
+onTab = { trayTab = it },
+onClose = { trayVisible = false },
+onCreateSketch = { primitive ->
+program?.let { current ->
+val face = selectedSurface
+val withPlane = if (face?.planar == true) {
+current.createFaceParallelPlane(
+CadFaceReference(
+objectId = "Cuerpo1",
+faceId = face.id,
+origin = CadVector3(face.point[0].toDouble(), face.point[1].toDouble(), face.point[2].toDouble()),
+normal = CadVector3(face.normal[0].toDouble(), face.normal[1].toDouble(), face.normal[2].toDouble())
+),
+0.0,
+"Plano de cara"
+)
+} else current
+val next = withPlane.createSketch(withPlane.activePlaneId, primitive)
+commit(next, message = "Croquis creado en ${next.planeSet.plane(next.activePlaneId).label}")
+sketchEditingId = next.activeSketchId
+}
+},
+onCreatePlane = { planeDialog = V24PlaneDialogMode.OFFSET },
+onOperation = { operation ->
+program?.let { current ->
+runCatching { current.append(operation, current.activePlaneId, current.activeSketchId) }
+.onSuccess { next -> commit(next, message = "${operation.label} añadido") }
+.onFailure { failure -> error = friendlyFailure("Añadir ${operation.label}", failure) }
+}
+}
+)
+}
+if (!trayVisible && sketchEditingId == null) {
+Surface(
+modifier = Modifier.align(Alignment.BottomCenter).clickable { trayVisible = true },
+color = V24Accent,
+shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp),
+shadowElevation = 5.dp
+) {
+Text("▲ Operaciones", Modifier.padding(horizontal = 18.dp, vertical = 7.dp), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 9.sp)
+}
+}
+planeDialog?.let { mode ->
+V25PlaneDialog(
+mode = mode,
+program = history.current,
+selectedSurface = selectedSurface?.toLegacyFace(),
+onCancel = { planeDialog = null },
+onCreate = { parentId, offset, label ->
+runCatching {
+when (mode) {
+V24PlaneDialogMode.OFFSET -> history.current.createOffsetPlane(parentId, offset, label)
+V24PlaneDialogMode.FACE -> {
+val face = selectedSurface?.takeIf { it.planar } ?: error("Seleccione una cara plana antes de crear el plano")
+history.current.createFaceParallelPlane(
+CadFaceReference(
+objectId = "Cuerpo1",
+faceId = face.id,
+origin = CadVector3(face.point[0].toDouble(), face.point[1].toDouble(), face.point[2].toDouble()),
+normal = CadVector3(face.normal[0].toDouble(), face.normal[1].toDouble(), face.normal[2].toDouble())
+),
+offset,
+label
+)
+}
+}
+}.onSuccess { next ->
+planeDialog = null
+commit(next, message = "Plano de referencia creado")
+}.onFailure { failure -> error = friendlyFailure("Crear plano", failure) }
+}
+)
+}
+recoveryPrompt?.let { snapshot ->
+AlertDialog(
+onDismissRequest = {},
+icon = { Icon(Icons.Default.Restore, null) },
+title = { Text("Recuperar trabajo de taller", fontWeight = FontWeight.Bold) },
+text = {
+Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+Text("Se encontró una sesión paramétrica guardada de forma automática.")
+Text("${snapshot.program.documentName} · revisión ${snapshot.program.revision} · ${snapshot.source}", color = V24Secondary)
+Text("La recuperación se reconstruirá con FreeCAD antes de reemplazar el modelo visible.")
+}
+},
+confirmButton = {
+Button(onClick = {
+recoveryPrompt = null
+rebuild(history.reset(snapshot.program), true, "Sesión de taller recuperada")
+}) { Text("Recuperar") }
+},
+dismissButton = {
+TextButton(onClick = {
+recoveryPrompt = null
+IndustrialCadRecoveryStore.clear(context)
+hasRecovery = false
+autosaveStatus = "Sin sesión recuperable"
+rebuild(history.reset(BasicCadProgram()), true, "Pieza paramétrica creada")
+}) { Text("Crear documento nuevo") }
+}
+)
+}
+if (workshopDialog) {
+IndustrialWorkshopDialog(
+gloveMode = gloveMode,
+autosaveStatus = autosaveStatus,
+hasRecovery = hasRecovery,
+onGloveMode = { enabled ->
+gloveMode = enabled
+IndustrialWorkshopPreferences.setGloveMode(context, enabled)
+status = if (enabled) "Modo guantes activado" else "Modo guantes desactivado"
+},
+onExportDiagnostics = {
+val report = IndustrialCadDiagnostics.exportReport(context)
+val share = Intent(Intent.ACTION_SEND).apply {
+type = "text/plain"
+putExtra(Intent.EXTRA_SUBJECT, "Diagnóstico SolidFreeCAD")
+putExtra(Intent.EXTRA_TEXT, report)
+}
+context.startActivity(Intent.createChooser(share, "Compartir diagnóstico"))
+},
+onClearRecovery = {
+IndustrialCadRecoveryStore.clear(context)
+hasRecovery = false
+autosaveStatus = "Sin sesión recuperable"
+status = "Sesión recuperable borrada"
+},
+onClearDiagnostics = {
+IndustrialCadDiagnostics.clear(context)
+status = "Registro técnico limpiado"
+},
+onDismiss = { workshopDialog = false }
+)
+}
+}
+}
+}
+}
+private fun v27SelectionStatus(selection: CadViewportSelectionV27): String = when (selection) {
+is CadViewportFaceSelectionV27 -> if (selection.planar) {
+"Cara plana · área ${v27Number(selection.approximateArea)} mm² · ${selection.boundaryLoopCount} bucle(s)"
+} else {
+"Superficie curva · área ${v27Number(selection.approximateArea)} mm²"
+}
+is CadViewportEdgeSelectionV27 -> "Arista · longitud ${v27Number(selection.length)} mm"
+is CadViewportVertexSelectionV27 -> "Vértice ${v27Point(selection.point)}"
+is CadViewportLoopSelectionV27 -> "${if (selection.closed) "Bucle cerrado" else "Cadena"} · perímetro ${v27Number(selection.perimeter)} mm"
+}
+private fun CadViewportFaceSelectionV27.toLegacyFace(): CadViewportFaceSelection = CadViewportFaceSelection(
+id = id,
+triangleOrdinals = triangleOrdinals,
+point = point,
+normal = normal,
+planar = planar
+)

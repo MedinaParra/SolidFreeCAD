@@ -3,7 +3,7 @@ name: Assemble v30 payload
 on:
   push:
     branches:
-      - stage-solidfreecad-v30-payload
+      - agent/stage-solidfreecad-v30-payload
 
 permissions:
   contents: write
@@ -34,4 +34,4 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
           git commit -m 'Assemble adaptive STEP editing payload'
-          git push origin HEAD:stage-solidfreecad-v30-payload
+          git push origin HEAD:agent/stage-solidfreecad-v30-payload

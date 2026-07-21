@@ -28,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -38,6 +39,8 @@ import com.example.industrial.IndustrialCadDiagnostics
 import com.example.industrial.IndustrialCadRecoveryStore
 import com.example.industrial.IndustrialWorkshopPreferences
 import com.example.ui.theme.MyApplicationTheme
+import com.medinaparra.freecadandroid.nativebridge.NativeStepBridge
+import com.medinaparra.freecadandroid.nativebridge.NativeStepSessionSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -55,6 +58,7 @@ override fun onResume() { super.onResume(); cadSurface?.onResume() }
 @Composable
 private fun V27Workbench(initialUri: Uri?, onSurfaceReady: (FaceDrivenCadSurfaceViewV27) -> Unit) {
 val context = LocalContext.current
+val configuration = LocalConfiguration.current
 val scope = rememberCoroutineScope()
 var history by remember { mutableStateOf(BasicCadHistory(BasicCadProgram())) }
 var document by remember { mutableStateOf<V24Document?>(null) }
@@ -79,6 +83,15 @@ var gloveMode by remember { mutableStateOf(IndustrialWorkshopPreferences.gloveMo
 var autosaveStatus by remember { mutableStateOf("Sin sesión recuperable") }
 var hasRecovery by remember { mutableStateOf(false) }
 var recoveryPrompt by remember { mutableStateOf<IndustrialCadRecoveryStore.RecoverySnapshot?>(null) }
+var stepPullDistance by rememberSaveable { mutableStateOf("10") }
+var stepPreviewActive by remember { mutableStateOf(false) }
+val adaptive = remember(configuration.screenWidthDp, configuration.screenHeightDp, gloveMode) {
+CadAdaptiveWorkbenchV30.resolve(
+configuration.screenWidthDp.toFloat(),
+configuration.screenHeightDp.toFloat(),
+gloveMode
+)
+}
 fun friendlyFailure(operation: String, throwable: Throwable): String {
 val failure = IndustrialCadDiagnostics.failure(context, operation, throwable)
 return "${failure.userMessage}\nCódigo ${failure.code}"
@@ -127,6 +140,56 @@ fun commit(next: BasicCadProgram, fit: Boolean = false, message: String) {
 if (next == history.current) { status = "No hay cambios para aplicar"; return }
 rebuild(history.commit(next), fit, message)
 }
+fun replaceStepSession(snapshot: NativeStepSessionSnapshot, fit: Boolean, message: String) {
+val current = document ?: return
+document = current.copy(
+mesh = snapshot.mesh.v24Native(),
+summary = snapshot.summary,
+token = System.nanoTime(),
+fit = fit,
+stepSession = snapshot
+)
+topologySelection = CadTopologySelectionSetV29.empty()
+selectedSurface = null
+selectedFace = EditableCadFace.NONE
+surface?.clearTopologySelection()
+status = message
+}
+fun previewStepPull() {
+val snapshot = document?.stepSession ?: return
+val face = selectedSurface?.nativeFaceId ?: run { status = "Seleccione una cara STEP plana"; return }
+val distance = stepPullDistance.toDoubleOrNull() ?: run { status = "Ingrese una distancia válida"; return }
+if (loading) return
+loading = true; error = null
+scope.launch {
+runCatching { withContext(Dispatchers.IO) { NativeStepBridge.previewPull(snapshot, face, distance) } }
+.onSuccess { stepPreviewActive = true; replaceStepSession(it, false, "Pull STEP en previsualización · ${v24Mm(distance)}") }
+.onFailure { error = friendlyFailure("Previsualizar Pull STEP", it); status = "El BRep confirmado se mantiene" }
+loading = false
+}
+}
+fun commitStepPreview() {
+val snapshot = document?.stepSession ?: return
+if (!stepPreviewActive || loading) return
+loading = true; error = null
+scope.launch {
+runCatching { withContext(Dispatchers.IO) { NativeStepBridge.commit(snapshot) } }
+.onSuccess { stepPreviewActive = false; replaceStepSession(it, false, "Pull STEP confirmado · revisión ${it.revision}") }
+.onFailure { error = friendlyFailure("Confirmar Pull STEP", it); status = "No se confirmó la previsualización" }
+loading = false
+}
+}
+fun rollbackStepPreview() {
+val snapshot = document?.stepSession ?: return
+if (!stepPreviewActive || loading) return
+loading = true; error = null
+scope.launch {
+runCatching { withContext(Dispatchers.IO) { NativeStepBridge.rollback(snapshot) } }
+.onSuccess { stepPreviewActive = false; replaceStepSession(it, false, "Previsualización STEP cancelada") }
+.onFailure { error = friendlyFailure("Cancelar Pull STEP", it) }
+loading = false
+}
+}
 fun openUri(uri: Uri) {
 if (loading) return
 runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -137,6 +200,7 @@ scope.launch {
 runCatching { v24LoadExternal(context, uri) }
 .onSuccess {
 document = it
+stepPreviewActive = false
 it.program?.let { program -> history = history.reset(program) }
 selection = V24Selection()
 selectedSurface = null
@@ -152,6 +216,22 @@ loading = false
 }
 }
 val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { it?.let(::openUri) }
+val saveStep = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("model/step")) { destination ->
+destination?.let { uri ->
+val snapshot = document?.stepSession ?: return@let
+loading = true; error = null
+scope.launch {
+runCatching { withContext(Dispatchers.IO) { v30SaveStepCopy(context, snapshot, uri) } }
+.onSuccess { status = "Copia STEP guardada · revisión ${snapshot.revision}" }
+.onFailure { error = friendlyFailure("Guardar copia STEP", it); status = "No se pudo guardar la copia" }
+loading = false
+}
+}
+}
+val sessionForDisposal = document?.stepSession
+DisposableEffect(sessionForDisposal?.handle) {
+onDispose { sessionForDisposal?.let { runCatching { NativeStepBridge.close(it) } } }
+}
 LaunchedEffect(initialUri) {
 IndustrialCadDiagnostics.event(context, "Inicio", "Interfaz BRep de taller iniciada")
 if (initialUri != null) openUri(initialUri) else {
@@ -180,7 +260,13 @@ onOpen = { open.launch(arrayOf("*/*")) },
 onUndo = { history.undo()?.let { rebuild(it, false, "Operación deshecha") } },
 onRedo = { history.redo()?.let { rebuild(it, false, "Operación rehecha") } },
 onFit = { document?.mesh?.let { surface?.fit(it) } }, onPreset = { surface?.setPreset(it) },
-onToggleTree = { treeVisible = !treeVisible }, onToggleProperties = { propertiesVisible = !propertiesVisible },
+onToggleTree = {
+treeVisible = !treeVisible
+if (treeVisible && !adaptive.allowsTwoPersistentPanels) propertiesVisible = false
+}, onToggleProperties = {
+propertiesVisible = !propertiesVisible
+if (propertiesVisible && !adaptive.allowsTwoPersistentPanels) treeVisible = false
+},
 onToggleTray = { trayVisible = !trayVisible }, onWorkshop = { workshopDialog = true }
 )
 },
@@ -195,13 +281,16 @@ exit = shrinkHorizontally(shrinkTowards = Alignment.Start, animationSpec = tween
 ) {
 V24Tree(program, selection, !loading,
 { selected -> selectedSurface=null; topologySelection=CadTopologySelectionSetV29.empty(); surface?.clearTopologySelection(); selection=selected; propertiesVisible=true },
-{ planeDialog=V24PlaneDialogMode.OFFSET }, { treeVisible=false }, Modifier.width(245.dp))
+{ planeDialog=V24PlaneDialogMode.OFFSET }, { treeVisible=false }, Modifier.width(adaptive.treeWidthDp.dp))
 }
 Box(Modifier.weight(1f).fillMaxHeight()) {
 AndroidView(
 factory = { androidContext -> FaceDrivenCadSurfaceViewV27(androidContext).also { surface=it; onSurfaceReady(it) } },
 update = { view ->
 view.onFaceSelected = { face -> if (!loading) { selectedFace=face; view.setSelectedFace(face) } }
+view.onSelectionLadderChanged = { ladder ->
+if (!loading && ladder.count > 1) ladder.label?.let { status = "Coincidencias: $it · toque otra vez para alternar" }
+}
 view.onTopologySelectionChanged = { selected -> if (!loading) {
 topologySelection = selected
 selectedSurface = selected.active as? CadViewportFaceSelectionV27
@@ -229,6 +318,10 @@ commit(history.current.updateBaseCylinder(diameter,depth), message="Extrusión a
 document?.let { activeDocument ->
 if (view.tag != activeDocument.token) {
 view.tag = activeDocument.token
-view.setMesh(activeDocument.mesh, activeDocument.fit)
+view.setMesh(
+activeDocument.mesh,
+activeDocument.fit,
+activeDocument.stepSession?.toCadTopologyV30()
+)
 }
 }

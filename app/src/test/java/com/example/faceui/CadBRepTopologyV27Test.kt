@@ -112,6 +112,37 @@ class CadBRepTopologyV27Test {
         assertEquals(1, inner.nestingDepth)
     }
 
+    @Test
+    fun nativeTriangleMapProducesOcctFaceSelection() {
+        val mesh = cubeMesh()
+        val mapping = intArrayOf(7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12)
+        val topology = CadBRepTopologyV27(
+            mesh = mesh,
+            triangleFaceIds = mapping,
+            nativeFaces = mapOf(
+                7 to CadNativeFaceMetadataV30(
+                    faceId = 7,
+                    point = floatArrayOf(.5f, .5f, 1f),
+                    normal = floatArrayOf(0f, 0f, 1f),
+                    area = 1f,
+                    planar = true
+                )
+            ),
+            nativeRevision = 3
+        )
+
+        val face = topology.pickFace(
+            floatArrayOf(.5f, .5f, 3f),
+            floatArrayOf(0f, 0f, -1f)
+        )
+
+        assertNotNull(face)
+        assertEquals(7, face!!.nativeFaceId)
+        assertEquals(3, face.nativeRevision)
+        assertTrue(face.id.startsWith("OcctFace-r3-7"))
+        assertEquals(2, face.triangleOrdinals.size)
+    }
+
     private fun cubeMesh(): NativeSceneMesh {
         val positions = arrayOf(
             floatArrayOf(0f, 0f, 0f), floatArrayOf(1f, 0f, 0f), floatArrayOf(1f, 1f, 0f), floatArrayOf(0f, 1f, 0f),

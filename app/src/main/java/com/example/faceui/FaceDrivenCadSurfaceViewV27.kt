@@ -16,6 +16,7 @@ class FaceDrivenCadSurfaceViewV27(context: Context) : GLSurfaceView(context) {
     var onFaceSelected: ((EditableCadFace) -> Unit)? = null
     var onTopologySelected: ((CadViewportSelectionV27?) -> Unit)? = null
     var onTopologySelectionChanged: ((CadTopologySelectionSetV29) -> Unit)? = null
+    var onSelectionLadderChanged: ((CadSelectionLadderResultV30) -> Unit)? = null
     var onReferencePlaneSelected: ((Long) -> Unit)? = null
     var onParameterPreview: ((EditableCadFace, Float) -> Unit)? = null
     var onParameterCommit: ((EditableCadFace, Float) -> Unit)? = null
@@ -42,6 +43,7 @@ class FaceDrivenCadSurfaceViewV27(context: Context) : GLSurfaceView(context) {
     private var frameLoopRunning = false
     private var lastUiPreviewTime = Long.MIN_VALUE
     private var directEditingEnabled = true
+    private val selectionLadder = CadSelectionLadderV30()
     private val density = resources.displayMetrics.density
     private val choreographer: Choreographer by lazy { Choreographer.getInstance() }
     private val frameCallback = object : Choreographer.FrameCallback {
@@ -70,10 +72,15 @@ class FaceDrivenCadSurfaceViewV27(context: Context) : GLSurfaceView(context) {
         renderMode = RENDERMODE_WHEN_DIRTY
     }
 
-    fun setMesh(mesh: NativeSceneMesh, fitCamera: Boolean = true) {
+    fun setMesh(
+        mesh: NativeSceneMesh,
+        fitCamera: Boolean = true,
+        nativeTopology: CadNativeTopologySnapshotV30? = null
+    ) {
         stopFrameLoop()
+        selectionLadder.reset()
         replaceTopologySelection(CadTopologySelectionSetV29.empty(), notify = true)
-        cadRenderer.setMesh(mesh)
+        cadRenderer.setMesh(mesh, nativeTopology)
         if (fitCamera) cadRenderer.camera.fitTo(mesh)
         requestRender()
     }
@@ -106,6 +113,7 @@ class FaceDrivenCadSurfaceViewV27(context: Context) : GLSurfaceView(context) {
     fun setSelectionMode(mode: CadViewportSelectionModeV27) {
         if (selectionMode == mode) return
         selectionMode = mode
+        selectionLadder.reset()
         clearTopologySelection()
     }
 
@@ -246,7 +254,7 @@ class FaceDrivenCadSurfaceViewV27(context: Context) : GLSurfaceView(context) {
                         onParameterCommit?.invoke(parameterDragFace, parameterPreviewValue)
                     }
                     !multiTouch && distance(downX, downY, event.x, event.y) < 13f * density -> {
-                        handleTap(event.x, event.y)
+                        handleTap(event.x, event.y, event.eventTime)
                     }
                 }
                 parameterDrag = false
@@ -265,8 +273,12 @@ class FaceDrivenCadSurfaceViewV27(context: Context) : GLSurfaceView(context) {
         return true
     }
 
-    private fun handleTap(x: Float, y: Float) {
-        val picked = cadRenderer.pickTopology(x, y, selectionMode)
+    private fun handleTap(x: Float, y: Float, eventTimeMs: Long) {
+        val ladderResult = selectionLadder.choose(
+            x, y, eventTimeMs, cadRenderer.pickTopologyCandidates(x, y, selectionMode)
+        )
+        onSelectionLadderChanged?.invoke(ladderResult)
+        val picked = ladderResult.selection
         if (picked != null) {
             val next = if (multiSelectionEnabled) {
                 topologySelection.toggle(picked)
@@ -291,11 +303,13 @@ class FaceDrivenCadSurfaceViewV27(context: Context) : GLSurfaceView(context) {
         } else {
             val plane = cadRenderer.pickReferencePlane(x, y)
             if (plane != null) {
+                selectionLadder.reset()
                 clearTopologySelection()
                 cadRenderer.setSelectedFace(EditableCadFace.NONE)
                 onFaceSelected?.invoke(EditableCadFace.NONE)
                 onReferencePlaneSelected?.invoke(plane)
             } else if (!multiSelectionEnabled) {
+                selectionLadder.reset()
                 clearTopologySelection()
                 cadRenderer.setSelectedFace(EditableCadFace.NONE)
                 onFaceSelected?.invoke(EditableCadFace.NONE)

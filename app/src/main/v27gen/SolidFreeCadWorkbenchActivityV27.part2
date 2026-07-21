@@ -71,6 +71,26 @@ modifier = Modifier.fillMaxSize()
 }
 if (loading) V24Loading(Modifier.align(Alignment.TopCenter).padding(top = 12.dp))
 error?.let { V24Error(it, { error = null }, Modifier.align(Alignment.BottomStart).padding(12.dp)) }
+document?.stepSession?.let { stepSession ->
+if (sketchEditingId == null) {
+V30StepEditBar(
+session = stepSession,
+selectedFace = selectedSurface,
+distanceText = stepPullDistance,
+previewActive = stepPreviewActive,
+enabled = !loading,
+onDistance = { stepPullDistance = it },
+onPreview = ::previewStepPull,
+onCommit = ::commitStepPreview,
+onRollback = ::rollbackStepPreview,
+onSave = {
+val baseName = document?.name?.substringBeforeLast('.') ?: "modelo"
+saveStep.launch("${baseName}-editado-r${stepSession.revision}.step")
+},
+modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(.96f).padding(bottom = if (trayVisible) adaptive.trayMaxHeightDp.dp else 10.dp)
+)
+}
+}
 }
 AnimatedVisibility(
 visible = propertiesVisible,
@@ -92,7 +112,7 @@ onTogglePlane = { id -> commit(history.current.togglePlaneVisibility(id), messag
 onCreateOffset = { planeDialog = V24PlaneDialogMode.OFFSET },
 onCreateFace = { planeDialog = V24PlaneDialogMode.FACE },
 onClose = { propertiesVisible = false },
-modifier = Modifier.width(285.dp)
+modifier = Modifier.width(adaptive.propertiesWidthDp.dp)
 )
 }
 }

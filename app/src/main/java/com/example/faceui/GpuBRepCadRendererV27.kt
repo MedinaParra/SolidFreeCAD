@@ -19,6 +19,7 @@ class GpuBRepCadRendererV27 : GLSurfaceView.Renderer {
     val selectedFace: EditableCadFace get() = base.selectedFace
 
     @Volatile private var pendingMesh: NativeSceneMesh? = null
+    @Volatile private var pendingNativeTopology: CadNativeTopologySnapshotV30? = null
     @Volatile private var pendingPlanes: List<CadViewportPlane> = emptyList()
     @Volatile private var planesDirty = false
     private var mesh: NativeSceneMesh? = null
@@ -70,7 +71,8 @@ class GpuBRepCadRendererV27 : GLSurfaceView.Renderer {
         void main(){ gl_FragColor=uColor; }
     """.trimIndent()
 
-    fun setMesh(value: NativeSceneMesh) {
+    fun setMesh(value: NativeSceneMesh, nativeTopology: CadNativeTopologySnapshotV30? = null) {
+        pendingNativeTopology = nativeTopology
         pendingMesh = value
         base.setMesh(value)
     }
@@ -101,11 +103,15 @@ class GpuBRepCadRendererV27 : GLSurfaceView.Renderer {
     }
 
     @Synchronized
-    fun pickTopology(x: Float, y: Float, mode: CadViewportSelectionModeV27): CadViewportSelectionV27? {
-        val ray = selectionRay(x, y) ?: return null
+    fun pickTopology(x: Float, y: Float, mode: CadViewportSelectionModeV27): CadViewportSelectionV27? =
+        pickTopologyCandidates(x, y, mode).firstOrNull()
+
+    @Synchronized
+    fun pickTopologyCandidates(x: Float, y: Float, mode: CadViewportSelectionModeV27): List<CadViewportSelectionV27> {
+        val ray = selectionRay(x, y) ?: return emptyList()
         val tolerance = (base.worldPerPixel() * PICK_RADIUS_PX)
             .coerceAtLeast((mesh?.maxDimension ?: 1f) * 2e-4f)
-        return topology?.pick(ray.first, ray.second, mode, tolerance)
+        return topology?.pickCandidates(ray.first, ray.second, mode, tolerance).orEmpty()
     }
 
     @Synchronized
@@ -153,12 +159,19 @@ class GpuBRepCadRendererV27 : GLSurfaceView.Renderer {
     @Synchronized
     override fun onDrawFrame(gl: GL10?) {
         base.onDrawFrame(gl)
-        pendingMesh?.let {
-            mesh = it
-            topology = CadBRepTopologyV27(it)
+        pendingMesh?.let { nextMesh ->
+            mesh = nextMesh
+            val native = pendingNativeTopology
+            topology = CadBRepTopologyV27(
+                mesh = nextMesh,
+                triangleFaceIds = native?.triangleFaceIds,
+                nativeFaces = native?.faces.orEmpty(),
+                nativeRevision = native?.revision
+            )
             clearGenericSelection()
             rebuildPlanes(pendingPlanes)
             pendingMesh = null
+            pendingNativeTopology = null
         }
         if (planesDirty) {
             rebuildPlanes(pendingPlanes)

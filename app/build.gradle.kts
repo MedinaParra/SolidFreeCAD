@@ -32,18 +32,18 @@ android {
     applicationId = "com.aistudio.solidmacro.fctech"
     minSdk = 24
     targetSdk = 36
-    versionCode = 20
-    versionName = "2.8.0-stabilization-a1"
+    versionCode = 30
+    versionName = "3.0.0-step-session-a1"
 
     ndk {
       abiFilters += listOf("armeabi-v7a", "arm64-v8a")
     }
 
     buildConfigField("String", "SOLIDFREECAD_COMMIT", "\"$solidFreeCadCommit\"")
-    buildConfigField("String", "FREECAD_RUNTIME_VERSION", "\"0.11.0\"")
+    buildConfigField("String", "FREECAD_RUNTIME_VERSION", "\"0.12.0-step-session\"")
     buildConfigField("String", "FREECAD_SOURCE_VERSION", "\"1.1.1\"")
-    buildConfigField("String", "FREECAD_RUNTIME_COMMIT", "\"1f70422ebaf60861971086709352d50716304625\"")
-    buildConfigField("String", "FREECAD_NATIVE_COMMIT", "\"1f70422ebaf60861971086709352d50716304625\"")
+    buildConfigField("String", "FREECAD_RUNTIME_COMMIT", "\"eb0e10de251f9e4ed6c94dc18a0e620e767946da\"")
+    buildConfigField("String", "FREECAD_NATIVE_COMMIT", "\"eb0e10de251f9e4ed6c94dc18a0e620e767946da\"")
     buildConfigField("String", "OCCT_VERSION", "\"7.9.2\"")
     buildConfigField("String", "CPYTHON_VERSION", "\"3.14.6\"")
     buildConfigField("String", "CAD_BACKEND_NAME", "\"FreeCAD-Native / OpenCASCADE\"")

@@ -101,12 +101,23 @@ jobs:
           cp .build/base/assets/licenses/FreeCAD-LGPL-2.1.txt app/src/main/assets/licenses/FreeCAD-LGPL-2.1.txt
 
       - name: Compile APK and run unit tests
+        id: gradle-build
+        continue-on-error: true
         shell: bash
         run: |
           set -o pipefail
           gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest 2>&1 | tee build-v31.log
 
+      - name: Upload Gradle build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SolidFreeCAD-v3.1.0-build-log
+          path: build-v31.log
+          retention-days: 7
+
       - name: Verify universal APK
+        if: steps.gradle-build.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
@@ -124,6 +135,7 @@ jobs:
           sha256sum SolidFreeCAD-v3.1.0-touch-workflows-a1-universal.apk > SolidFreeCAD-v3.1.0-touch-workflows-a1-universal.apk.sha256
 
       - name: Upload universal APK
+        if: steps.gradle-build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: SolidFreeCAD-v3.1.0-touch-workflows-a1-universal
@@ -132,3 +144,8 @@ jobs:
             SolidFreeCAD-v3.1.0-touch-workflows-a1-universal.apk.sha256
             build-v31.log
           retention-days: 30
+
+      - name: Propagate Gradle failure
+        if: steps.gradle-build.outcome != 'success'
+        shell: bash
+        run: exit 1

@@ -32,13 +32,22 @@ jobs:
           from pathlib import Path
           with zipfile.ZipFile('/tmp/v31.zip') as archive:
               archive.extractall('.')
-          target = Path('app/src/main/java/com/example/faceui/CadSketchTouchV31.kt')
-          source = target.read_text()
-          old = 'fun modelDelta(dx: Float, dy: Float): Pair<Double, Double> = dx / scale to -dy / scale'
-          new = 'fun modelDelta(dx: Float, dy: Float): Pair<Double, Double> = (dx / scale).toDouble() to (-dy / scale).toDouble()'
-          if old not in source:
+
+          touch_target = Path('app/src/main/java/com/example/faceui/CadSketchTouchV31.kt')
+          touch_source = touch_target.read_text()
+          touch_old = 'fun modelDelta(dx: Float, dy: Float): Pair<Double, Double> = dx / scale to -dy / scale'
+          touch_new = 'fun modelDelta(dx: Float, dy: Float): Pair<Double, Double> = (dx / scale).toDouble() to (-dy / scale).toDouble()'
+          if touch_old not in touch_source:
               raise SystemExit('Expected CadSketchTouchV31 modelDelta contract was not found')
-          target.write_text(source.replace(old, new, 1))
+          touch_target.write_text(touch_source.replace(touch_old, touch_new, 1))
+
+          test_target = Path('app/src/test/java/com/example/faceui/CadSketchTouchV31Test.kt')
+          test_source = test_target.read_text()
+          test_old = 'CadSketch.empty("S")'
+          test_new = 'CadSketch(id = 1L, label = "S", planeId = 1L)'
+          if test_source.count(test_old) != 3:
+              raise SystemExit('Expected three CadSketch.empty test factories')
+          test_target.write_text(test_source.replace(test_old, test_new))
           PY
           test -s app/build.gradle.kts
           test -s app/src/main/java/com/medinaparra/freecadandroid/nativebridge/NativeStepBridge.kt

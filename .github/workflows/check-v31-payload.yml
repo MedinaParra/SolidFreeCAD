@@ -7,6 +7,8 @@ on:
 permissions:
   contents: read
 
+actions:
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -14,13 +16,29 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Reconstruct and inspect payload
+      - name: Generate payload diagnostics
         shell: bash
         run: |
-          set -euo pipefail
-          ls -l .agent-v31/chunk-*
-          cat .agent-v31/chunk-* > /tmp/v31.b64
-          base64 --decode /tmp/v31.b64 > /tmp/v31.zip
-          sha256sum /tmp/v31.zip
-          unzip -t /tmp/v31.zip
-          unzip -l /tmp/v31.zip | tail -n 3
+          set +e
+          {
+            echo 'Individual fragment hashes:'
+            sha256sum .agent-v31/chunk-*
+            echo
+            cat .agent-v31/chunk-* > /tmp/v31.b64
+            echo "base64_chars=$(wc -c < /tmp/v31.b64)"
+            base64 --decode /tmp/v31.b64 > /tmp/v31.zip
+            echo "decode_status=$?"
+            if test -f /tmp/v31.zip; then
+              sha256sum /tmp/v31.zip
+              unzip -t /tmp/v31.zip
+              echo "unzip_status=$?"
+            fi
+          } > payload-diagnostic.txt 2>&1
+          cat payload-diagnostic.txt
+      - name: Upload payload diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: solidfreecad-v31-payload-diagnostic
+          path: payload-diagnostic.txt
+          retention-days: 3

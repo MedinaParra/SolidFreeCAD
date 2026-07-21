@@ -20,7 +20,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
-      - name: Reconstruct and verify v3.1 source payload
+      - name: Reconstruct, verify and patch v3.1 source payload
         shell: bash
         run: |
           set -euo pipefail
@@ -29,8 +29,16 @@ jobs:
           echo '7eea8ab0ac331b9ed379e704a74e07dea5e282b5ec3c7ce94a98e7af9ec0343d  /tmp/v31.zip' | sha256sum -c -
           python3 - <<'PY'
           import zipfile
+          from pathlib import Path
           with zipfile.ZipFile('/tmp/v31.zip') as archive:
               archive.extractall('.')
+          target = Path('app/src/main/java/com/example/faceui/CadSketchTouchV31.kt')
+          source = target.read_text()
+          old = 'fun modelDelta(dx: Float, dy: Float): Pair<Double, Double> = dx / scale to -dy / scale'
+          new = 'fun modelDelta(dx: Float, dy: Float): Pair<Double, Double> = (dx / scale).toDouble() to (-dy / scale).toDouble()'
+          if old not in source:
+              raise SystemExit('Expected CadSketchTouchV31 modelDelta contract was not found')
+          target.write_text(source.replace(old, new, 1))
           PY
           test -s app/build.gradle.kts
           test -s app/src/main/java/com/medinaparra/freecadandroid/nativebridge/NativeStepBridge.kt

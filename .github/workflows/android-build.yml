@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/stage-solidfreecad-v30-payload
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -27,6 +30,7 @@ jobs:
           rm -rf .agent-payload
           rm -f .github/workflows/apply-v30-payload.yml
       - name: Commit assembled revision
+        if: ${{ github.event_name == 'push' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -35,3 +39,11 @@ jobs:
           git add -A
           git commit -m 'Assemble adaptive STEP editing payload'
           git push origin HEAD:agent/stage-solidfreecad-v30-payload
+      - name: Validate assembled PR payload
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f app/src/main/java/com/example/faceui/V30StepSessionUi.kt
+          test -f docs/V30_STEP_TOUCH_WORKFLOW.md
+          grep -q '3.0.0-step-session-a1' app/build.gradle.kts

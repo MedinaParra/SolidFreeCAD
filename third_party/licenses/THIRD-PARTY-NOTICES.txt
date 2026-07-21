@@ -1,0 +1,16 @@
+SolidFreeCAD Android third-party runtime notices
+
+FreeCAD 1.1.1 / FreeCAD Base runtime 0.11.0
+- License: GNU LGPL 2.1 or later, as supplied by the validated FreeCAD-Native runtime artifact.
+- Source: https://github.com/FreeCAD/FreeCAD/tree/1.1.1
+
+Open CASCADE Technology 7.9.2
+- License: GNU LGPL 2.1 with Open CASCADE Exception 1.0.
+- Source: https://github.com/Open-Cascade-SAS/OCCT/tree/V7_9_2
+
+CPython 3.14.6
+- License: Python Software Foundation License Version 2 and incorporated component licenses.
+- Source: https://github.com/python/cpython/tree/v3.14.6
+- The complete LICENSE.txt is extracted from the packaged CPython runtime during the Android build.
+
+The application does not claim ownership of these projects or their trademarks.

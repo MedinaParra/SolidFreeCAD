@@ -1,21 +1,56 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# SolidFreeCAD
 
-# Run and deploy your AI Studio app
+Aplicación CAD para Android escrita en Kotlin y Jetpack Compose. Su objetivo es ofrecer un entorno móvil inspirado en SolidWorks para crear geometría paramétrica y exportar macros `.FCMacro` compatibles con FreeCAD.
 
-This contains everything you need to run your app locally.
+## Requisitos de desarrollo
 
-View your app in AI Studio: https://ai.studio/apps/495d0253-db3e-4d96-b956-223c1c58632d
+- Android Studio compatible con Android Gradle Plugin 9.1.1
+- JDK 17
+- Android SDK 36 y Build Tools 36.0.0
+- Gradle 9.3.1 cuando se compile fuera de Android Studio
 
-## Run Locally
+## Abrir y ejecutar
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+1. Clona el repositorio y abre la carpeta raíz en Android Studio.
+2. Selecciona JDK 17 como **Gradle JDK**.
+3. Instala Android SDK 36 si Android Studio lo solicita.
+4. Sincroniza el proyecto con Gradle.
+5. Ejecuta la variante `debug` en un dispositivo o emulador con Android 7.0 o superior.
+
+El proyecto no necesita una clave de Gemini, `google-services.json` ni un keystore personalizado para compilar la variante debug.
+
+## Compilación automática
+
+El workflow **Android build** usa JDK 17, Gradle 9.3.1 y Android SDK 36 para ejecutar:
+
+```text
+gradle :app:assembleDebug :app:testDebugUnitTest
+```
+
+Cuando la compilación finaliza correctamente, GitHub Actions publica el archivo `app-debug.apk` como artefacto `SolidFreeCAD-debug`.
+
+## Estado actual
+
+El entorno incluye:
+
+- interfaz CAD en Jetpack Compose;
+- árbol de operaciones y administrador de propiedades;
+- visor geométrico interactivo;
+- generación y exportación de macros FreeCAD.
+
+El visor actual es un renderizador geométrico implementado con Compose Canvas; no incorpora todavía el núcleo OpenCascade/FreeCAD dentro de Android.
 
 
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
+## Android 2.9 — multiselección táctil
+
+La rama `agent/solidfreecad-v2.9-direct-selection` conecta el conjunto topológico v2.9 con el visor táctil y OpenGL:
+
+- modo de selección múltiple aditivo;
+- toque repetido para retirar una entidad;
+- entidad activa con resaltado de mayor intensidad;
+- selecciones secundarias conservadas en el visor;
+- regiones exteriores, interiores y cadenas abiertas con colores diferenciados;
+- métricas acumuladas en el panel de propiedades;
+- invalidación de la selección al sustituir la malla BRep confirmada.
+
+Los identificadores continúan derivados de la triangulación y no son nombres topológicos OCCT persistentes.

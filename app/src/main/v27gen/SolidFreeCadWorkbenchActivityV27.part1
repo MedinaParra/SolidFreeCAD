@@ -61,8 +61,9 @@ var document by remember { mutableStateOf<V24Document?>(null) }
 var selection by remember { mutableStateOf(V24Selection(V24SelectionType.FEATURE, 1L)) }
 var selectedFace by remember { mutableStateOf(EditableCadFace.NONE) }
 var selectedSurface by remember { mutableStateOf<CadViewportFaceSelectionV27?>(null) }
-var selectedTopology by remember { mutableStateOf<CadViewportSelectionV27?>(null) }
+var topologySelection by remember { mutableStateOf(CadTopologySelectionSetV29.empty()) }
 var selectionMode by rememberSaveable { mutableStateOf(CadViewportSelectionModeV27.AUTO) }
+var multiSelectionEnabled by rememberSaveable { mutableStateOf(false) }
 var treeVisible by rememberSaveable { mutableStateOf(true) }
 var propertiesVisible by rememberSaveable { mutableStateOf(true) }
 var trayVisible by rememberSaveable { mutableStateOf(true) }
@@ -108,7 +109,7 @@ runCatching { v24BuildProgram(context, candidate.current, fit) }
 history = candidate
 document = it
 selectedSurface = null
-selectedTopology = null
+topologySelection = CadTopologySelectionSetV29.empty()
 surface?.clearTopologySelection()
 selection = V24Selection(V24SelectionType.FEATURE, candidate.current.features.lastOrNull()?.id)
 status = message
@@ -139,7 +140,8 @@ document = it
 it.program?.let { program -> history = history.reset(program) }
 selection = V24Selection()
 selectedSurface = null
-selectedTopology = null
+topologySelection = CadTopologySelectionSetV29.empty()
+surface?.clearTopologySelection()
 status = "${it.format} cargado"
 IndustrialCadDiagnostics.event(context, "Abrir", "${it.format} · ${it.name}")
 }.onFailure {
@@ -192,7 +194,7 @@ enter = expandHorizontally(expandFrom = Alignment.Start, animationSpec = tween(V
 exit = shrinkHorizontally(shrinkTowards = Alignment.Start, animationSpec = tween(V24AnimMs, easing = FastOutSlowInEasing)) + fadeOut()
 ) {
 V24Tree(program, selection, !loading,
-{ selected -> selectedSurface=null; selectedTopology=null; surface?.clearTopologySelection(); selection=selected; propertiesVisible=true },
+{ selected -> selectedSurface=null; topologySelection=CadTopologySelectionSetV29.empty(); surface?.clearTopologySelection(); selection=selected; propertiesVisible=true },
 { planeDialog=V24PlaneDialogMode.OFFSET }, { treeVisible=false }, Modifier.width(245.dp))
 }
 Box(Modifier.weight(1f).fillMaxHeight()) {
@@ -200,13 +202,20 @@ AndroidView(
 factory = { androidContext -> FaceDrivenCadSurfaceViewV27(androidContext).also { surface=it; onSurfaceReady(it) } },
 update = { view ->
 view.onFaceSelected = { face -> if (!loading) { selectedFace=face; view.setSelectedFace(face) } }
-view.onTopologySelected = { topology -> if (!loading) {
-selectedTopology=topology
-selectedSurface=topology as? CadViewportFaceSelectionV27
-if (topology != null) { selection=V24Selection(); propertiesVisible=true; status=v27SelectionStatus(topology) }
+view.onTopologySelectionChanged = { selected -> if (!loading) {
+topologySelection = selected
+selectedSurface = selected.active as? CadViewportFaceSelectionV27
+if (!selected.isEmpty) {
+selection = V24Selection()
+propertiesVisible = true
+status = v29SelectionStatus(selected)
+} else {
+selectedSurface = null
+status = "Selección limpiada"
+}
 } }
 view.onReferencePlaneSelected = { planeId -> if (!loading) {
-selectedSurface=null; selectedTopology=null; selectedFace=EditableCadFace.NONE
+selectedSurface=null; topologySelection=CadTopologySelectionSetV29.empty(); selectedFace=EditableCadFace.NONE
 selection=V24Selection(V24SelectionType.PLANE, planeId); propertiesVisible=true
 status=program?.planeSet?.planes?.firstOrNull { it.id==planeId }?.let { "${it.label} seleccionado" } ?: "Plano seleccionado"
 } }

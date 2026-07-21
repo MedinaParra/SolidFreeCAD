@@ -37,6 +37,45 @@ class CadTopologySelectionSetV29Test {
         assertEquals("face-b", collapsed.active?.id)
     }
 
+    @Test
+    fun mixedSelectionAggregatesLoopPerimeterAndVertexCount() {
+        val loop = CadViewportLoopSelectionV27(
+            id = "loop-a",
+            edgeIds = intArrayOf(1, 2, 3, 4),
+            orderedPoints = floatArrayOf(0f, 0f, 0f, 1f, 0f, 0f),
+            point = floatArrayOf(.5f, 0f, 0f),
+            normal = floatArrayOf(0f, 0f, 1f),
+            closed = true,
+            perimeter = 8f,
+            role = CadLoopRoleV29.INNER,
+            signedArea = -4f,
+            nestingDepth = 1
+        )
+        val vertex = CadViewportVertexSelectionV27(
+            id = "vertex-a",
+            vertexIndex = 2,
+            point = floatArrayOf(1f, 2f, 3f),
+            incidentFeatureEdges = 3
+        )
+
+        val selected = CadTopologySelectionSetV29.empty().toggle(loop).toggle(vertex)
+        assertEquals(1, selected.loopCount)
+        assertEquals(1, selected.vertexCount)
+        assertEquals(8f, selected.totalLoopPerimeter, 1e-4f)
+        assertEquals(vertex.id, selected.activeId)
+
+        val activated = selected.activate(loop.id)
+        assertEquals(loop.id, activated.activeId)
+        assertEquals(CadLoopRoleV29.INNER, (activated.active as CadViewportLoopSelectionV27).role)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun selectionRejectsMoreThanMobileLimit() {
+        CadTopologySelectionSetV29(
+            selections = (0..CadTopologySelectionSetV29.MAX_SELECTIONS).map { face("face-$it", 1f) }
+        )
+    }
+
     private fun face(id: String, area: Float) = CadViewportFaceSelectionV27(
         id = id,
         triangleOrdinals = intArrayOf(0),

@@ -1,8 +1,10 @@
 val first = program?.features?.firstOrNull()
 view.setDimensions((first?.parameters?.get("depth") ?: 40.0).toFloat(), (first?.parameters?.get("diameter") ?: 34.93).toFloat())
 view.setSelectionMode(selectionMode)
-view.setDirectEditingEnabled(!loading && directCylinder)
-view.setSelectedFace(if (!loading && directCylinder) selectedFace else EditableCadFace.NONE)
+view.setMultiSelectionEnabled(multiSelectionEnabled)
+view.setTopologySelection(topologySelection)
+view.setDirectEditingEnabled(!loading && directCylinder && !multiSelectionEnabled)
+view.setSelectedFace(if (!loading && directCylinder && !multiSelectionEnabled) selectedFace else EditableCadFace.NONE)
 view.setReferencePlanes(program?.planeSet?.planes?.map { plane ->
 CadViewportPlane(
 id = plane.id,
@@ -18,18 +20,31 @@ modifier = Modifier.fillMaxSize()
 if (sketchEditingId == null) {
 V27SelectionFilterBar(
 mode = selectionMode,
+multiple = multiSelectionEnabled,
+selectionCount = topologySelection.size,
 enabled = !loading && document != null,
 onMode = { mode ->
 selectionMode = mode
-selectedTopology = null
+topologySelection = CadTopologySelectionSetV29.empty()
 selectedSurface = null
 selectedFace = EditableCadFace.NONE
 surface?.clearTopologySelection()
 surface?.setSelectedFace(EditableCadFace.NONE)
 status = "Filtro de selección: ${mode.label}"
 },
+onMultiple = { enabled ->
+multiSelectionEnabled = enabled
+surface?.setMultiSelectionEnabled(enabled)
+if (!enabled && topologySelection.isMultiple) {
+topologySelection = topologySelection.replace(topologySelection.active)
+selectedSurface = topologySelection.active as? CadViewportFaceSelectionV27
+}
+selectedFace = EditableCadFace.NONE
+surface?.setSelectedFace(EditableCadFace.NONE)
+status = if (enabled) "Selección múltiple activada" else "Selección individual activada"
+},
 onClear = {
-selectedTopology = null
+topologySelection = CadTopologySelectionSetV29.empty()
 selectedSurface = null
 selectedFace = EditableCadFace.NONE
 surface?.clearTopologySelection()
@@ -63,7 +78,7 @@ enter = expandHorizontally(expandFrom = Alignment.End, animationSpec = tween(V24
 exit = shrinkHorizontally(shrinkTowards = Alignment.End, animationSpec = tween(V24AnimMs, easing = FastOutSlowInEasing)) + fadeOut()
 ) {
 V27Properties(
-topology = selectedTopology,
+topologySelection = topologySelection,
 feature = selectedFeature,
 plane = selectedPlane,
 sketch = selectedSketch,
@@ -229,15 +244,20 @@ onDismiss = { workshopDialog = false }
 }
 }
 }
+private fun v29SelectionStatus(selection: CadTopologySelectionSetV29): String {
+if (selection.isEmpty) return "Selección limpiada"
+if (selection.isMultiple) return "${selection.size} elementos · ${selection.faceCount} cara(s) · ${selection.edgeCount} arista(s) · ${selection.vertexCount} vértice(s) · ${selection.loopCount} bucle(s)"
+return v27SelectionStatus(requireNotNull(selection.active))
+}
 private fun v27SelectionStatus(selection: CadViewportSelectionV27): String = when (selection) {
 is CadViewportFaceSelectionV27 -> if (selection.planar) {
-"Cara plana · área ${v27Number(selection.approximateArea)} mm² · ${selection.boundaryLoopCount} bucle(s)"
+"Cara plana · área ${v27Number(selection.approximateArea)} mm² · ${selection.outerLoopCount} exterior(es) · ${selection.innerLoopCount} interior(es)"
 } else {
 "Superficie curva · área ${v27Number(selection.approximateArea)} mm²"
 }
 is CadViewportEdgeSelectionV27 -> "Arista · longitud ${v27Number(selection.length)} mm"
 is CadViewportVertexSelectionV27 -> "Vértice ${v27Point(selection.point)}"
-is CadViewportLoopSelectionV27 -> "${if (selection.closed) "Bucle cerrado" else "Cadena"} · perímetro ${v27Number(selection.perimeter)} mm"
+is CadViewportLoopSelectionV27 -> "${selection.role.label} · perímetro ${v27Number(selection.perimeter)} mm"
 }
 private fun CadViewportFaceSelectionV27.toLegacyFace(): CadViewportFaceSelection = CadViewportFaceSelection(
 id = id,

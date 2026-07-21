@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   apply:
-    if: ${{ hashFiles('.agent-payload/READY') != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +19,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test -f .agent-payload/READY
           cat .agent-payload/chunk-* > /tmp/v30.b64
           base64 --decode /tmp/v30.b64 > /tmp/v30.zip
           echo '6e214c5115e476c3656863552b7a302d805f49513d28f7806a0b959dcfd6de6c  /tmp/v30.zip' | sha256sum -c -

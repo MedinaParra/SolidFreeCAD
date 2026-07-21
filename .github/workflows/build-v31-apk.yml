@@ -1,4 +1,4 @@
-name: Build SolidFreeCAD v3.1 APK
+name: Build SolidFreeCAD v3.1.1 Samsung A26 Safe Start
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  build-v31:
+  build-v311-safe:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -20,7 +20,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
-      - name: Reconstruct, verify and patch v3.1 source payload
+      - name: Reconstruct, verify and patch Samsung safe-start source
         shell: bash
         run: |
           set -euo pipefail
@@ -30,27 +30,64 @@ jobs:
           python3 - <<'PY'
           import zipfile
           from pathlib import Path
+
           with zipfile.ZipFile('/tmp/v31.zip') as archive:
               archive.extractall('.')
 
           touch_target = Path('app/src/main/java/com/example/faceui/CadSketchTouchV31.kt')
           touch_source = touch_target.read_text()
-          touch_old = 'fun modelDelta(dx: Float, dy: Float): Pair<Double, Double> = dx / scale to -dy / scale'
-          touch_new = 'fun modelDelta(dx: Float, dy: Float): Pair<Double, Double> = (dx / scale).toDouble() to (-dy / scale).toDouble()'
-          if touch_old not in touch_source:
-              raise SystemExit('Expected CadSketchTouchV31 modelDelta contract was not found')
-          touch_target.write_text(touch_source.replace(touch_old, touch_new, 1))
+          touch_source = touch_source.replace(
+              'fun modelDelta(dx: Float, dy: Float): Pair<Double, Double> = dx / scale to -dy / scale',
+              'fun modelDelta(dx: Float, dy: Float): Pair<Double, Double> = (dx / scale).toDouble() to (-dy / scale).toDouble()',
+              1,
+          )
+          touch_target.write_text(touch_source)
 
           test_target = Path('app/src/test/java/com/example/faceui/CadSketchTouchV31Test.kt')
-          test_source = test_target.read_text()
-          test_old = 'CadSketch.empty("S")'
-          test_new = 'CadSketch(id = 1L, label = "S", planeId = 1L)'
-          if test_source.count(test_old) != 3:
-              raise SystemExit('Expected three CadSketch.empty test factories')
-          test_target.write_text(test_source.replace(test_old, test_new))
+          test_source = test_target.read_text().replace(
+              'CadSketch.empty("S")',
+              'CadSketch(id = 1L, label = "S", planeId = 1L)',
+          )
+          test_target.write_text(test_source)
+
+          activity_target = Path('app/src/main/v27gen/SolidFreeCadWorkbenchActivityV27.part1')
+          activity_source = activity_target.read_text()
+          startup_old = '} else rebuild(history.reset(BasicCadProgram()), true, "Pieza paramétrica creada")'
+          startup_new = '''} else {
+status = "Inicio seguro activo · el núcleo CAD se cargará solo al abrir o crear un modelo"
+}'''
+          if startup_old not in activity_source:
+              raise SystemExit('Safe-start startup target not found')
+          activity_source = activity_source.replace(startup_old, startup_new, 1)
+          new_old = 'onNew = { rebuild(history.reset(BasicCadProgram()), true, "Pieza paramétrica creada") },'
+          new_new = 'onNew = { rebuild(history.reset(BasicCadProgram()), true, "Cargando núcleo CAD para crear una pieza…") },'
+          if new_old not in activity_source:
+              raise SystemExit('New document action target not found')
+          activity_target.write_text(activity_source.replace(new_old, new_new, 1))
+
+          gradle_target = Path('app/build.gradle.kts')
+          gradle_source = gradle_target.read_text()
+          gradle_source = gradle_source.replace('versionCode = 31', 'versionCode = 32', 1)
+          gradle_source = gradle_source.replace(
+              'versionName = "3.1.0-touch-workflows-a1"',
+              'versionName = "3.1.1-samsung-safe-start-a1"',
+              1,
+          )
+          gradle_target.write_text(gradle_source)
+
+          manifest_target = Path('app/src/main/AndroidManifest.xml')
+          manifest_source = manifest_target.read_text()
+          if 'android:largeHeap="true"' not in manifest_source:
+              manifest_source = manifest_source.replace(
+                  'android:allowBackup="true"',
+                  'android:allowBackup="true"\n        android:largeHeap="true"',
+                  1,
+              )
+          manifest_target.write_text(manifest_source)
           PY
-          test -s app/build.gradle.kts
-          test -s app/src/main/java/com/medinaparra/freecadandroid/nativebridge/NativeStepBridge.kt
+          grep -q '3.1.1-samsung-safe-start-a1' app/build.gradle.kts
+          grep -q 'Inicio seguro activo' app/src/main/v27gen/SolidFreeCadWorkbenchActivityV27.part1
+          grep -q 'android:largeHeap="true"' app/src/main/AndroidManifest.xml
           rm -rf .agent-v31
 
       - name: Set up JDK 17
@@ -111,30 +148,20 @@ jobs:
             cp ".build/files/lib/$ABI/libfreecad_android_core.so" "app/src/main/jniLibs/$ABI/libfreecad_files_core.so"
             patchelf --set-soname libfreecad_files_core.so "app/src/main/jniLibs/$ABI/libfreecad_files_core.so"
             nm -D --defined-only "app/src/main/jniLibs/$ABI/libfreecad_android_core.so" | grep -q nativePreviewMove
+            readelf -lW "app/src/main/jniLibs/$ABI/libfreecad_android_core.so" | grep 'LOAD' | grep -q '0x4000'
             test -f "app/src/main/jniLibs/$ABI/libTKBRep.so"
             test -f "app/src/main/jniLibs/$ABI/libTKDESTEP.so"
             test -f "app/src/main/jniLibs/$ABI/libpython3.14.so"
           done
           cp .build/base/assets/licenses/FreeCAD-LGPL-2.1.txt app/src/main/assets/licenses/FreeCAD-LGPL-2.1.txt
 
-      - name: Compile APK and run unit tests
-        id: gradle-build
-        continue-on-error: true
+      - name: Compile safe-start APK and run tests
         shell: bash
         run: |
           set -o pipefail
-          gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest 2>&1 | tee build-v31.log
+          gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest 2>&1 | tee build-v311-safe.log
 
-      - name: Upload Gradle build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: SolidFreeCAD-v3.1.0-build-log
-          path: build-v31.log
-          retention-days: 7
-
-      - name: Verify universal APK
-        if: steps.gradle-build.outcome == 'success'
+      - name: Verify universal safe-start APK
         shell: bash
         run: |
           set -euo pipefail
@@ -148,21 +175,15 @@ jobs:
             grep -q "lib/$ABI/libTKDESTEP.so" apk-contents.txt
             grep -q "lib/$ABI/libpython3.14.so" apk-contents.txt
           done
-          cp "$APK" SolidFreeCAD-v3.1.0-touch-workflows-a1-universal.apk
-          sha256sum SolidFreeCAD-v3.1.0-touch-workflows-a1-universal.apk > SolidFreeCAD-v3.1.0-touch-workflows-a1-universal.apk.sha256
+          cp "$APK" SolidFreeCAD-v3.1.1-Samsung-A26-safe-start-universal.apk
+          sha256sum SolidFreeCAD-v3.1.1-Samsung-A26-safe-start-universal.apk > SolidFreeCAD-v3.1.1-Samsung-A26-safe-start-universal.apk.sha256
 
-      - name: Upload universal APK
-        if: steps.gradle-build.outcome == 'success'
+      - name: Upload safe-start universal APK
         uses: actions/upload-artifact@v4
         with:
-          name: SolidFreeCAD-v3.1.0-touch-workflows-a1-universal
+          name: SolidFreeCAD-v3.1.1-Samsung-A26-safe-start-universal
           path: |
-            SolidFreeCAD-v3.1.0-touch-workflows-a1-universal.apk
-            SolidFreeCAD-v3.1.0-touch-workflows-a1-universal.apk.sha256
-            build-v31.log
+            SolidFreeCAD-v3.1.1-Samsung-A26-safe-start-universal.apk
+            SolidFreeCAD-v3.1.1-Samsung-A26-safe-start-universal.apk.sha256
+            build-v311-safe.log
           retention-days: 30
-
-      - name: Propagate Gradle failure
-        if: steps.gradle-build.outcome != 'success'
-        shell: bash
-        run: exit 1

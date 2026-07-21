@@ -39,3 +39,18 @@ El entorno incluye:
 - generación y exportación de macros FreeCAD.
 
 El visor actual es un renderizador geométrico implementado con Compose Canvas; no incorpora todavía el núcleo OpenCascade/FreeCAD dentro de Android.
+
+
+## Android 2.9 — multiselección táctil
+
+La rama `agent/solidfreecad-v2.9-direct-selection` conecta el conjunto topológico v2.9 con el visor táctil y OpenGL:
+
+- modo de selección múltiple aditivo;
+- toque repetido para retirar una entidad;
+- entidad activa con resaltado de mayor intensidad;
+- selecciones secundarias conservadas en el visor;
+- regiones exteriores, interiores y cadenas abiertas con colores diferenciados;
+- métricas acumuladas en el panel de propiedades;
+- invalidación de la selección al sustituir la malla BRep confirmada.
+
+Los identificadores continúan derivados de la triangulación y no son nombres topológicos OCCT persistentes.

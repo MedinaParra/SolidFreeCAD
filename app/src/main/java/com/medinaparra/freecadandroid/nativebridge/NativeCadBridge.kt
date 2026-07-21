@@ -77,12 +77,8 @@ data class NativeMacroScene(
  * official FreeCAD 1.1.1 Base::Vector3d/Matrix4D and FreeCAD-style macro APIs.
  */
 object NativeCadBridge {
-    val isAvailable: Boolean by lazy {
-        runCatching {
-            System.loadLibrary("freecad_android_core")
-            true
-        }.getOrDefault(false)
-    }
+    val isAvailable: Boolean
+        get() = NativeBackendRegistry.coreLoaded
 
     external fun nativeBuildInfo(): String
     external fun nativeCreateDocument(name: String): Long

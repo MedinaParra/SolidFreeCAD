@@ -10,12 +10,8 @@ data class FreeCadBaseHealth(
 
 /** Diagnostic bridge compiled against official FreeCAD 1.1.1 src/Base sources. */
 object FreeCadBaseBridge {
-    private val libraryLoaded: Boolean by lazy {
-        runCatching {
-            System.loadLibrary("freecad_android_core")
-            true
-        }.getOrDefault(false)
-    }
+    private val libraryLoaded: Boolean
+        get() = NativeBackendRegistry.coreLoaded
 
     external fun nativeSelfTest(): String
 

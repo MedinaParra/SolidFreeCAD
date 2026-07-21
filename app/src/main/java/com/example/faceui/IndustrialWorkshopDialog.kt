@@ -1,5 +1,6 @@
 package com.example.faceui
 
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.BuildConfig
+import com.medinaparra.freecadandroid.nativebridge.NativeBackendRegistry
+import com.medinaparra.freecadandroid.runtime.BaseRuntimeDescriptor
 
 @Composable
 internal fun IndustrialWorkshopDialog(
@@ -46,7 +49,13 @@ internal fun IndustrialWorkshopDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("SolidFreeCAD ${BuildConfig.VERSION_NAME}")
+                Text("Commit app: ${BuildConfig.SOLIDFREECAD_COMMIT.take(12)}")
                 Text("FreeCAD ${BuildConfig.FREECAD_SOURCE_VERSION} · Runtime ${BuildConfig.FREECAD_RUNTIME_VERSION}")
+                Text("Commit motor: ${BuildConfig.FREECAD_NATIVE_COMMIT.take(12)}")
+                Text("OCCT ${BuildConfig.OCCT_VERSION} · CPython ${BuildConfig.CPYTHON_VERSION}")
+                Text("ABI: ${BaseRuntimeDescriptor.selectAbi(Build.SUPPORTED_ABIS.toList()) ?: "no compatible"}")
+                Text("Backend: ${NativeBackendRegistry.activeBackend}")
+                Text("Licencias: FreeCAD LGPL 2.1+, OCCT LGPL 2.1 + excepción, CPython PSF v2")
                 HorizontalDivider()
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {

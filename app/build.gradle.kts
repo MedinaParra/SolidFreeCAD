@@ -3,6 +3,27 @@ plugins {
   alias(libs.plugins.kotlin.compose)
 }
 
+fun resolveSolidFreeCadCommit(): String {
+  val environmentCommit = System.getenv("SOLIDFREECAD_SOURCE_COMMIT")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: System.getenv("GITHUB_SHA")?.trim()?.takeIf { it.isNotEmpty() }
+  if (environmentCommit != null) return environmentCommit.take(40)
+
+  return runCatching {
+    ProcessBuilder("git", "rev-parse", "HEAD")
+      .redirectErrorStream(true)
+      .start()
+      .inputStream
+      .bufferedReader()
+      .use { it.readText().trim() }
+      .take(40)
+      .ifBlank { "unknown" }
+  }.getOrDefault("unknown")
+}
+
+val solidFreeCadCommit = resolveSolidFreeCadCommit()
+
 android {
   namespace = "com.example"
   compileSdk = 36
@@ -11,16 +32,21 @@ android {
     applicationId = "com.aistudio.solidmacro.fctech"
     minSdk = 24
     targetSdk = 36
-    versionCode = 19
-    versionName = "2.7-topology-selection-loops"
+    versionCode = 20
+    versionName = "2.8.0-stabilization-a1"
 
     ndk {
       abiFilters += listOf("armeabi-v7a", "arm64-v8a")
     }
 
+    buildConfigField("String", "SOLIDFREECAD_COMMIT", "\"$solidFreeCadCommit\"")
     buildConfigField("String", "FREECAD_RUNTIME_VERSION", "\"0.11.0\"")
     buildConfigField("String", "FREECAD_SOURCE_VERSION", "\"1.1.1\"")
     buildConfigField("String", "FREECAD_RUNTIME_COMMIT", "\"1f70422ebaf60861971086709352d50716304625\"")
+    buildConfigField("String", "FREECAD_NATIVE_COMMIT", "\"1f70422ebaf60861971086709352d50716304625\"")
+    buildConfigField("String", "OCCT_VERSION", "\"7.9.2\"")
+    buildConfigField("String", "CPYTHON_VERSION", "\"3.14.6\"")
+    buildConfigField("String", "CAD_BACKEND_NAME", "\"FreeCAD-Native / OpenCASCADE\"")
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

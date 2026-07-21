@@ -4,6 +4,9 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import com.example.nativecad.viewer.NativeSceneMesh
+import com.medinaparra.freecadandroid.nativebridge.NativeBackendRegistry
+import com.medinaparra.freecadandroid.nativebridge.NativeFreeCadFileBridge
+import com.medinaparra.freecadandroid.nativebridge.NativeStepBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
@@ -52,12 +55,8 @@ object NativeCadBridge {
     const val SOURCE_REPOSITORY = "MedinaParra/FreeCAD-Native"
     private const val MAX_STEP_PREVIEW_BYTES = 24 * 1024 * 1024
 
-    private val nativeLibraryLoaded: Boolean by lazy {
-        runCatching {
-            System.loadLibrary("freecad_native")
-            true
-        }.getOrDefault(false)
-    }
+    private val nativeLibraryLoaded: Boolean
+        get() = NativeBackendRegistry.coreLoaded
 
     fun capabilities(): NativeCadCapabilities = NativeCadCapabilities(
         sourceRepository = SOURCE_REPOSITORY,
@@ -66,8 +65,8 @@ object NativeCadBridge {
         stepInspectionReady = true,
         fcStdInspectionReady = true,
         openGlPreviewReady = true,
-        stepGeometryReady = nativeLibraryLoaded,
-        fcStdParametricReady = false
+        stepGeometryReady = NativeStepBridge.isAvailable,
+        fcStdParametricReady = NativeFreeCadFileBridge.isAvailable
     )
 
     suspend fun inspect(context: Context, uri: Uri): Result<NativeDocumentSummary> =

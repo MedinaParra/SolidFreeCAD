@@ -3,6 +3,12 @@ package com.example.industrial
 import android.content.Context
 import android.os.Build
 import com.example.BuildConfig
+import com.medinaparra.freecadandroid.nativebridge.FreeCadBaseBridge
+import com.medinaparra.freecadandroid.nativebridge.NativeBackendRegistry
+import com.medinaparra.freecadandroid.nativebridge.NativeCadBridge
+import com.medinaparra.freecadandroid.nativebridge.NativeFreeCadFileBridge
+import com.medinaparra.freecadandroid.nativebridge.NativeStepBridge
+import com.medinaparra.freecadandroid.runtime.BaseRuntimeDescriptor
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -40,15 +46,61 @@ object IndustrialCadDiagnostics {
     }
 
     fun exportReport(context: Context): String = synchronized(lock) {
+        val selectedAbi = BaseRuntimeDescriptor.selectAbi(Build.SUPPORTED_ABIS.toList())
+        val nativeDirectory = File(context.applicationInfo.nativeLibraryDir.orEmpty())
+        val coreLibrary = File(nativeDirectory, "lib${NativeBackendRegistry.CORE_LIBRARY}.so")
+        val fcStdLibrary = File(nativeDirectory, "lib${NativeBackendRegistry.FCSTD_LIBRARY}.so")
+        val occtLibrary = File(nativeDirectory, "libTKBRep.so")
+        val stepLibrary = File(nativeDirectory, "libTKDESTEP.so")
+        val pythonLibrary = File(nativeDirectory, "libpython3.14.so")
+        val pythonAssetReady = selectedAbi?.let { abi ->
+            runCatching {
+                context.assets.open(BaseRuntimeDescriptor.pythonAssetPath(abi)).use { true }
+            }.getOrDefault(false)
+        } ?: false
+        val baseHealth = FreeCadBaseBridge.health()
+        val nativeBuildInfo = if (NativeCadBridge.isAvailable) {
+            runCatching { NativeCadBridge.nativeBuildInfo() }
+                .getOrElse { "unavailable: ${it.message ?: it::class.java.simpleName}" }
+        } else {
+            "native core not loaded"
+        }
+        val runtime = Runtime.getRuntime()
+
         buildString {
             appendLine("SolidFreeCAD - diagnóstico de taller")
             appendLine("Versión: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            appendLine("Commit SolidFreeCAD: ${BuildConfig.SOLIDFREECAD_COMMIT}")
+            appendLine("FreeCAD Base: ${BuildConfig.FREECAD_SOURCE_VERSION} / runtime ${BuildConfig.FREECAD_RUNTIME_VERSION}")
+            appendLine("Commit FreeCAD-Native: ${BuildConfig.FREECAD_NATIVE_COMMIT}")
+            appendLine("OpenCASCADE: ${BuildConfig.OCCT_VERSION}")
+            appendLine("CPython: ${BuildConfig.CPYTHON_VERSION}")
+            appendLine("Backend declarado: ${BuildConfig.CAD_BACKEND_NAME}")
+            appendLine("Backend cargado: ${NativeBackendRegistry.activeBackend}")
             appendLine("Android: ${Build.VERSION.RELEASE} / SDK ${Build.VERSION.SDK_INT}")
             appendLine("Dispositivo: ${Build.MANUFACTURER} ${Build.MODEL}")
-            appendLine("ABI: ${Build.SUPPORTED_ABIS.joinToString()}")
-            appendLine("Runtime FreeCAD: ${BuildConfig.FREECAD_RUNTIME_VERSION}")
-            appendLine("Fuente FreeCAD: ${BuildConfig.FREECAD_SOURCE_VERSION}")
+            appendLine("ABI dispositivo: ${Build.SUPPORTED_ABIS.joinToString()}")
+            appendLine("ABI activa: ${selectedAbi ?: "no compatible"}")
             appendLine("Fecha: ${timestamp()}")
+            appendLine()
+            appendLine("--- AUTODIAGNÓSTICO LOCAL ---")
+            NativeBackendRegistry.diagnosticLines().forEach(::appendLine)
+            appendLine("Core ELF presente: ${yesNo(coreLibrary.isFile)}")
+            appendLine("FCStd ELF presente: ${yesNo(fcStdLibrary.isFile)}")
+            appendLine("OpenCASCADE TKBRep presente: ${yesNo(occtLibrary.isFile)}")
+            appendLine("STEP TKDESTEP presente: ${yesNo(stepLibrary.isFile)}")
+            appendLine("CPython ELF presente: ${yesNo(pythonLibrary.isFile)}")
+            appendLine("Python assets presentes: ${yesNo(pythonAssetReady)}")
+            appendLine("Puente STEP disponible: ${yesNo(NativeStepBridge.isAvailable && stepLibrary.isFile)}")
+            appendLine("Puente FCStd disponible: ${yesNo(NativeFreeCadFileBridge.isAvailable && fcStdLibrary.isFile)}")
+            appendLine("FreeCAD Base self-test: ${if (baseHealth.available) "PASS" else "FAIL"} · ${baseHealth.diagnostic}")
+            appendLine("Build info nativo: $nativeBuildInfo")
+            appendLine("Memoria usada aproximada: ${mb(runtime.totalMemory() - runtime.freeMemory())} MB")
+            appendLine("Memoria asignada: ${mb(runtime.totalMemory())} MB")
+            appendLine("Memoria máxima JVM: ${mb(runtime.maxMemory())} MB")
+            appendLine("Ruta nativa: ${nativeDirectory.absolutePath}")
+            appendLine("Ruta de recursos: ${context.filesDir.absolutePath}")
+            appendLine("Ruta de recuperación: ${context.noBackupFilesDir.absolutePath}")
             appendLine()
             appendLine("--- EVENTOS ---")
             val directory = directory(context)
@@ -112,6 +164,10 @@ object IndustrialCadDiagnostics {
 
     private fun directory(context: Context): File =
         File(context.noBackupFilesDir, "industrial-diagnostics").apply { mkdirs() }
+
+    private fun yesNo(value: Boolean): String = if (value) "sí" else "no"
+
+    private fun mb(bytes: Long): Long = bytes / (1024L * 1024L)
 
     private fun timestamp(): String =
         SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US).format(Date())

@@ -11,12 +11,19 @@ permissions:
   actions: read
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
+  SOLIDFREECAD_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+  SOLIDFREECAD_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
   FREECAD_BASE_RUNTIME_RUN: 29699041993
   FREECAD_BASE_RUNTIME_ARTIFACT: freecad-android-base-runtime-v0110-apk
   FREECAD_FILES_RUNTIME_RUN: 29699041982
   FREECAD_FILES_RUNTIME_ARTIFACT: freecad-android-fcmacro-fcstd-apk
   FREECAD_BASE_RUNTIME_COMMIT: 1f70422ebaf60861971086709352d50716304625
+  FREECAD_FILES_RUNTIME_COMMIT: 1f70422ebaf60861971086709352d50716304625
 
 jobs:
   build-and-test:
@@ -24,8 +31,27 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Checkout repository
+      - name: Checkout exact source commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SOLIDFREECAD_SOURCE_COMMIT }}
+          fetch-depth: 0
+
+      - name: Validate Android source contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${SOLIDFREECAD_SOURCE_COMMIT}"
+          test "$(grep -R --include='*.kt' -l 'System.loadLibrary' app/src/main/java | wc -l)" -eq 1
+          grep -q 'object NativeBackendRegistry' \
+            app/src/main/java/com/medinaparra/freecadandroid/nativebridge/NativeBackendRegistry.kt
+          ! grep -R --include='*.kt' -n 'freecad_native' app/src/main/java
+          test "$(grep -c 'android.intent.category.LAUNCHER' app/src/main/AndroidManifest.xml)" -eq 1
+          grep -q 'SolidFreeCadWorkbenchActivityV27' app/src/main/AndroidManifest.xml
+          grep -q 'versionName = "2.8.0-stabilization-a1"' app/build.gradle.kts
+          test -s NATIVE_RUNTIME_PROVENANCE.md
+          test -s third_party/licenses/OCCT-NOTICE.txt
+          test -s third_party/licenses/THIRD-PARTY-NOTICES.txt
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -42,7 +68,7 @@ jobs:
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
           sudo apt-get update
-          sudo apt-get install -y patchelf
+          sudo apt-get install -y binutils patchelf
 
       - name: Set up Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v4
@@ -79,6 +105,8 @@ jobs:
           test -n "${FILES_APK}" && test -n "${FILES_HASH}"
           (cd "$(dirname "${BASE_APK}")" && sha256sum -c "$(basename "${BASE_HASH}")")
           (cd "$(dirname "${FILES_APK}")" && sha256sum -c "$(basename "${FILES_HASH}")")
+          BASE_APK_SHA256="$(sha256sum "${BASE_APK}" | awk '{print $1}')"
+          FILES_APK_SHA256="$(sha256sum "${FILES_APK}" | awk '{print $1}')"
 
           rm -rf .build/native-runtime .build/files-runtime app/src/main/jniLibs \
             app/src/main/assets/python-runtime app/src/main/assets/licenses
@@ -112,6 +140,8 @@ jobs:
             FILES_CORE="app/src/main/jniLibs/${ABI}/libfreecad_files_core.so"
             test -f "${BASE_CORE}"
             test -f "${FILES_CORE}"
+            test -f "app/src/main/jniLibs/${ABI}/libc++_shared.so"
+            test -f "app/src/main/jniLibs/${ABI}/libTKBRep.so"
             test -f "app/src/main/jniLibs/${ABI}/libTKDESTEP.so"
             test -f "app/src/main/jniLibs/${ABI}/libpython3.14.so"
             test -f "app/src/main/assets/python-runtime/${ABI}.zip"
@@ -127,12 +157,56 @@ jobs:
             nm -D --defined-only "${FILES_CORE}" \
               | grep -q 'Java_com_medinaparra_freecadandroid_nativebridge_NativeFreeCadFileBridge_nativeImportBrepObjects'
             readelf -d "${FILES_CORE}" | grep -q 'libfreecad_files_core.so'
-            echo "${ABI}: $(find "app/src/main/jniLibs/${ABI}" -type f -name '*.so' | wc -l) libraries"
+
+            while IFS= read -r LIBRARY; do
+              while IFS= read -r NEEDED; do
+                case "${NEEDED}" in
+                  libc.so|libdl.so|liblog.so|libm.so|libz.so|libandroid.so|libjnigraphics.so|libEGL.so|libGLESv2.so|libGLESv3.so|libOpenSLES.so|libmediandk.so) ;;
+                  *) test -f "app/src/main/jniLibs/${ABI}/${NEEDED}" || {
+                    echo "Missing ELF dependency ${NEEDED} required by ${LIBRARY} (${ABI})" >&2
+                    exit 1
+                  } ;;
+                esac
+              done < <(readelf -d "${LIBRARY}" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p')
+            done < <(find "app/src/main/jniLibs/${ABI}" -maxdepth 1 -type f -name '*.so' | sort)
+
+            echo "${ABI}: $(find "app/src/main/jniLibs/${ABI}" -type f -name '*.so' | wc -l) libraries" \
+              | tee -a elf-closure.txt
           done
 
           cp .build/native-runtime/assets/licenses/FreeCAD-LGPL-2.1.txt \
             app/src/main/assets/licenses/FreeCAD-LGPL-2.1.txt
-          test -s app/src/main/assets/licenses/FreeCAD-LGPL-2.1.txt
+          cp .build/native-runtime/assets/licenses/FreeCAD-LGPL-2.1.txt \
+            app/src/main/assets/licenses/OCCT-LGPL-2.1.txt
+          cp third_party/licenses/OCCT-NOTICE.txt app/src/main/assets/licenses/OCCT-NOTICE.txt
+          cp third_party/licenses/THIRD-PARTY-NOTICES.txt \
+            app/src/main/assets/licenses/THIRD-PARTY-NOTICES.txt
+          unzip -p "app/src/main/assets/python-runtime/arm64-v8a.zip" \
+            lib/python3.14/LICENSE.txt > app/src/main/assets/licenses/CPython-LICENSE.txt
+
+          for LICENSE_FILE in \
+            FreeCAD-LGPL-2.1.txt OCCT-LGPL-2.1.txt OCCT-NOTICE.txt \
+            CPython-LICENSE.txt THIRD-PARTY-NOTICES.txt; do
+            test -s "app/src/main/assets/licenses/${LICENSE_FILE}"
+          done
+
+          cat > app/src/main/assets/runtime-provenance.txt <<EOF_PROVENANCE
+          SolidFreeCAD source branch=${SOLIDFREECAD_SOURCE_BRANCH}
+          SolidFreeCAD source commit=${SOLIDFREECAD_SOURCE_COMMIT}
+          FreeCAD-Native base commit=${FREECAD_BASE_RUNTIME_COMMIT}
+          FreeCAD-Native base run=${FREECAD_BASE_RUNTIME_RUN}
+          FreeCAD-Native base artifact=${FREECAD_BASE_RUNTIME_ARTIFACT}
+          FreeCAD-Native base APK sha256=${BASE_APK_SHA256}
+          FreeCAD-Native FCStd commit=${FREECAD_FILES_RUNTIME_COMMIT}
+          FreeCAD-Native FCStd run=${FREECAD_FILES_RUNTIME_RUN}
+          FreeCAD-Native FCStd artifact=${FREECAD_FILES_RUNTIME_ARTIFACT}
+          FreeCAD-Native FCStd APK sha256=${FILES_APK_SHA256}
+          FreeCAD source version=1.1.1
+          FreeCAD Base runtime=0.11.0
+          OpenCASCADE version=7.9.2
+          CPython version=3.14.6
+          ABI=armeabi-v7a,arm64-v8a
+          EOF_PROVENANCE
 
       - name: Build and run unit tests
         id: gradle-build
@@ -141,6 +215,20 @@ jobs:
         run: |
           set -o pipefail
           gradle --no-daemon --stacktrace :app:assembleDebug :app:testDebugUnitTest 2>&1 | tee build.log
+
+      - name: Summarize unit-test coverage
+        if: steps.gradle-build.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          find app/build/test-results/testDebugUnitTest -type f -name 'TEST-*.xml' -print0 \
+            | xargs -0 grep -h '<testsuite ' > unit-test-suites.txt
+          for CONTRACT in \
+            CameraNavigationTest CadSketchConstraintTest BasicCadMacroGeneratorTest \
+            MultiEntitySketchMacroTest CadBRepTopologyV27Test CadBRepSelectionTest \
+            StepPreviewParserTest FreeCadArchiveRoundTripTest; do
+            grep -q "${CONTRACT}" unit-test-suites.txt
+          done
 
       - name: Verify self-contained universal APK
         if: steps.gradle-build.outcome == 'success'
@@ -152,12 +240,22 @@ jobs:
           for ABI in armeabi-v7a arm64-v8a; do
             grep -q "lib/${ABI}/libfreecad_android_core.so" apk-contents.txt
             grep -q "lib/${ABI}/libfreecad_files_core.so" apk-contents.txt
+            grep -q "lib/${ABI}/libc++_shared.so" apk-contents.txt
+            grep -q "lib/${ABI}/libTKBRep.so" apk-contents.txt
             grep -q "lib/${ABI}/libTKDESTEP.so" apk-contents.txt
             grep -q "lib/${ABI}/libpython3.14.so" apk-contents.txt
             grep -q "assets/python-runtime/${ABI}.zip" apk-contents.txt
           done
-          grep -q 'assets/licenses/FreeCAD-LGPL-2.1.txt' apk-contents.txt
+          for ASSET in \
+            FreeCAD-LGPL-2.1.txt OCCT-LGPL-2.1.txt OCCT-NOTICE.txt \
+            CPython-LICENSE.txt THIRD-PARTY-NOTICES.txt; do
+            grep -q "assets/licenses/${ASSET}" apk-contents.txt
+          done
+          grep -q 'assets/runtime-provenance.txt' apk-contents.txt
           sha256sum "${APK}" | tee app-debug.apk.sha256
+          cp "${APK}" "SolidFreeCAD-v2.8.0-stabilization-a1-universal.apk"
+          sha256sum SolidFreeCAD-v2.8.0-stabilization-a1-universal.apk \
+            | tee SolidFreeCAD-v2.8.0-stabilization-a1-universal.apk.sha256
 
       - name: Package complete source project
         if: steps.gradle-build.outcome == 'success'
@@ -166,22 +264,24 @@ jobs:
           set -euo pipefail
           mkdir -p project-archive
           git archive --format=zip --prefix=SolidFreeCAD-source/ \
-            --output="project-archive/SolidFreeCAD-source-${GITHUB_SHA}.zip" HEAD
+            --output="project-archive/SolidFreeCAD-source-${SOLIDFREECAD_SOURCE_COMMIT}.zip" HEAD
           cp "$(find .deps/freecad-base-runtime -type f -name '*.apk' | head -n 1)" \
             project-archive/FreeCAD-Android-Base-Runtime-v0.11.0.apk
           cp "$(find .deps/freecad-files-runtime -type f -name '*.apk' | head -n 1)" \
             project-archive/FreeCAD-Android-FCStd-Bridge.apk
-          cp app/build/outputs/apk/debug/app-debug.apk \
-            project-archive/SolidFreeCAD-v1.9-freecad-base-0110-gpu.apk
-          cp build.log apk-contents.txt app-debug.apk.sha256 project-archive/
-          cat > project-archive/README-BUNDLE.txt <<EOF
+          cp SolidFreeCAD-v2.8.0-stabilization-a1-universal.apk* project-archive/
+          cp NATIVE_RUNTIME_PROVENANCE.md build.log apk-contents.txt app-debug.apk.sha256 \
+            elf-closure.txt unit-test-suites.txt project-archive/
+          cp app/src/main/assets/runtime-provenance.txt project-archive/
+          cat > project-archive/README-BUNDLE.txt <<EOF_BUNDLE
           SolidFreeCAD complete project bundle
-          Branch: ${GITHUB_REF_NAME}
-          Commit: ${GITHUB_SHA}
-          FreeCAD-Native commit: ${FREECAD_BASE_RUNTIME_COMMIT}
-          Includes source, FreeCAD Base runtime 0.11.0, object-aware FCStd bridge,
-          ARM32/ARM64 APK, CPython, OCCT STEP, GPU VSYNC face preview and build logs.
-          EOF
+          Branch: ${SOLIDFREECAD_SOURCE_BRANCH}
+          Commit: ${SOLIDFREECAD_SOURCE_COMMIT}
+          FreeCAD-Native base commit: ${FREECAD_BASE_RUNTIME_COMMIT}
+          FreeCAD-Native FCStd commit: ${FREECAD_FILES_RUNTIME_COMMIT}
+          Includes source, validated runtime inputs, ARM32/ARM64 universal APK,
+          CPython, OCCT STEP, FCStd bridge, license notices, ELF report and test logs.
+          EOF_BUNDLE
 
       - name: Upload build log
         if: always()
@@ -192,14 +292,20 @@ jobs:
             build.log
             apk-contents.txt
             app-debug.apk.sha256
+            SolidFreeCAD-v2.8.0-stabilization-a1-universal.apk.sha256
+            elf-closure.txt
+            unit-test-suites.txt
+            app/src/main/assets/runtime-provenance.txt
           if-no-files-found: warn
 
-      - name: Upload debug APK
+      - name: Upload universal debug APK
         if: steps.gradle-build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: SolidFreeCAD-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: SolidFreeCAD-v2.8.0-stabilization-a1-universal
+          path: |
+            SolidFreeCAD-v2.8.0-stabilization-a1-universal.apk
+            SolidFreeCAD-v2.8.0-stabilization-a1-universal.apk.sha256
           if-no-files-found: error
 
       - name: Upload complete project bundle

@@ -38,12 +38,8 @@ data class NativeFreeCadFileScene(
  * coexist without replacing each other's JNI contracts.
  */
 object NativeFreeCadFileBridge {
-    val isAvailable: Boolean by lazy {
-        runCatching {
-            System.loadLibrary("freecad_files_core")
-            true
-        }.getOrDefault(false)
-    }
+    val isAvailable: Boolean
+        get() = NativeBackendRegistry.fcStdLoaded
 
     private external fun nativeImportBrepFiles(
         localPaths: Array<String>,

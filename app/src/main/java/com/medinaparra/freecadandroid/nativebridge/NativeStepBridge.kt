@@ -31,12 +31,8 @@ data class NativeStepScene(
 )
 
 object NativeStepBridge {
-    val isAvailable: Boolean by lazy {
-        runCatching {
-            System.loadLibrary("freecad_android_core")
-            true
-        }.getOrDefault(false)
-    }
+    val isAvailable: Boolean
+        get() = NativeBackendRegistry.coreLoaded
 
     private external fun nativeImportStep(
         localPath: String,

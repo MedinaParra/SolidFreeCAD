@@ -1,6 +1,7 @@
 package com.example.faceui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -34,6 +35,9 @@ internal fun V27SelectionFilterBar(
     onClear: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val gloveMode = LocalV24GloveMode.current
+    val target = if (gloveMode) 58.dp else 48.dp
+    val labelSize = if (gloveMode) 12.sp else 11.sp
     Surface(
         modifier = modifier,
         color = Color(0xF7FFFFFF),
@@ -42,18 +46,18 @@ internal fun V27SelectionFilterBar(
         shadowElevation = 5.dp
     ) {
         Row(
-            Modifier.padding(horizontal = 5.dp, vertical = 4.dp),
+            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            Text("SELECCIÓN", fontWeight = FontWeight.Bold, fontSize = 8.sp, color = V24Secondary)
+            Text("SELECCIÓN", fontWeight = FontWeight.Bold, fontSize = labelSize, color = V24Secondary)
             CadViewportSelectionModeV27.entries.forEach { candidate ->
                 FilterChip(
                     selected = mode == candidate,
                     onClick = { onMode(candidate) },
                     enabled = enabled,
-                    label = { Text(candidate.label, fontSize = 8.sp) },
-                    modifier = Modifier.height(30.dp),
+                    label = { Text(candidate.label, fontSize = labelSize) },
+                    modifier = Modifier.heightIn(min = target),
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = V24Accent,
                         selectedLabelColor = Color.White
@@ -67,10 +71,10 @@ internal fun V27SelectionFilterBar(
                 label = {
                     Text(
                         if (selectionCount > 0) "Múltiple · $selectionCount" else "Múltiple",
-                        fontSize = 8.sp
+                        fontSize = labelSize
                     )
                 },
-                modifier = Modifier.height(30.dp),
+                modifier = Modifier.heightIn(min = target),
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = Color(0xFF176B87),
                     selectedLabelColor = Color.White
@@ -79,9 +83,9 @@ internal fun V27SelectionFilterBar(
             IconButton(
                 onClick = onClear,
                 enabled = enabled && selectionCount > 0,
-                modifier = Modifier.size(30.dp)
+                modifier = Modifier.size(target)
             ) {
-                Icon(Icons.Default.Clear, "Limpiar selección", tint = V24Accent, modifier = Modifier.size(17.dp))
+                Icon(Icons.Default.Clear, "Limpiar selección", tint = V24Accent, modifier = Modifier.size(if (gloveMode) 26.dp else 22.dp))
             }
         }
     }
@@ -139,7 +143,7 @@ internal fun V27Properties(
                     fontWeight = FontWeight.Bold,
                     fontSize = 9.sp
                 )
-                IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
+                IconButton(onClick = onClose, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Default.KeyboardArrowRight, "Ocultar", tint = V24Accent)
                 }
             }
@@ -188,6 +192,7 @@ private fun SingleTopologyProperties(
         is CadViewportFaceSelectionV27 -> {
             Text(if (topology.planar) "Cara plana" else "Superficie curva", fontWeight = FontWeight.Bold, fontSize = 13.sp)
             TopologyId(topology.id)
+            topology.nativeFaceId?.let { Metric("Cara OCCT", "$it · revisión ${topology.nativeRevision ?: 0}") }
             Metric("Área aproximada", "${v27Number(topology.approximateArea)} mm²")
             Metric("Normal", v25Normal(topology.normal))
             Metric("Triángulos", topology.triangleOrdinals.size.toString())

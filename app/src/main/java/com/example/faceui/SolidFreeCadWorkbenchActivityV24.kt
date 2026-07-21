@@ -87,7 +87,8 @@ internal data class V24Document(
     val summary: String,
     val program: BasicCadProgram?,
     val token: Long,
-    val fit: Boolean
+    val fit: Boolean,
+    val stepSession: com.medinaparra.freecadandroid.nativebridge.NativeStepSessionSnapshot? = null
 )
 
 class SolidFreeCadWorkbenchActivityV24 : ComponentActivity() {

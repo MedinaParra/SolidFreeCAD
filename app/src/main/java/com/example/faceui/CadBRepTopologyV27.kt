@@ -29,7 +29,9 @@ data class CadViewportFaceSelectionV27(
     val approximateArea: Float = 0f,
     val boundaryLoopCount: Int = 0,
     val outerLoopCount: Int = 0,
-    val innerLoopCount: Int = 0
+    val innerLoopCount: Int = 0,
+    val nativeFaceId: Int? = null,
+    val nativeRevision: Int? = null
 ) : CadViewportSelectionV27
 
 data class CadViewportEdgeSelectionV27(
@@ -72,7 +74,15 @@ data class CadViewportLoopSelectionV27(
  * after a committed BRep mesh arrives. V2.9 adds deterministic outer/inner loop classification
  * in the local plane of each planar face.
  */
-class CadBRepTopologyV27(private val mesh: NativeSceneMesh) {
+class CadBRepTopologyV27(
+    private val mesh: NativeSceneMesh,
+    triangleFaceIds: IntArray? = null,
+    private val nativeFaces: Map<Int, CadNativeFaceMetadataV30> = emptyMap(),
+    private val nativeRevision: Int? = null
+) {
+    private val nativeFaceIdByTri: IntArray? = triangleFaceIds
+        ?.takeIf { it.size == mesh.triangleCount && it.all { faceId -> faceId > 0 } }
+        ?.copyOf()
     private data class Key(val a: Int, val b: Int) {
         companion object {
             fun of(a: Int, b: Int) = if (a < b) Key(a, b) else Key(b, a)
@@ -166,24 +176,47 @@ class CadBRepTopologyV27(private val mesh: NativeSceneMesh) {
         }
     }
 
+    fun pickCandidates(
+        origin: FloatArray,
+        direction: FloatArray,
+        mode: CadViewportSelectionModeV27,
+        worldTolerance: Float
+    ): List<CadViewportSelectionV27> {
+        val tolerance = max(worldTolerance, mesh.maxDimension * 0.0002f)
+        if (mode != CadViewportSelectionModeV27.AUTO) {
+            return listOfNotNull(pick(origin, direction, mode, tolerance))
+        }
+        return listOfNotNull(
+            pickVertex(origin, direction, tolerance * .72f),
+            pickEdge(origin, direction, tolerance),
+            pickLoop(origin, direction),
+            pickFace(origin, direction)
+        ).distinctBy { it.id }
+    }
+
     fun pickFace(origin: FloatArray, direction: FloatArray): CadViewportFaceSelectionV27? {
         val hit = hit(origin, norm(direction)) ?: return null
         val cluster = surfaces[surfaceByTri[hit.tri]]
-        val seed = tris[hit.tri].n
-        val planar = isPlanar(cluster, hit.p, seed)
-        val normal = if (planar) average(cluster, seed) else seed.copyOf()
+        val nativeFaceId = nativeFaceIdByTri?.getOrNull(hit.tri)
+        val native = nativeFaceId?.let(nativeFaces::get)
+        val seed = native?.normal ?: tris[hit.tri].n
+        val planar = native?.planar ?: isPlanar(cluster, hit.p, seed)
+        val normal = native?.normal?.copyOf() ?: if (planar) average(cluster, seed) else seed.copyOf()
         val boundaryLoops = if (planar) classifyLoops(cluster, normal) else loops(cluster)
         val hash = cluster.fold(17) { accumulator, value -> accumulator * 31 + value }
         return CadViewportFaceSelectionV27(
-            id = "MeshFace-${hit.tri}-${hash.toUInt().toString(16)}",
+            id = nativeFaceId?.let { "OcctFace-r${nativeRevision ?: 0}-$it" }
+                ?: "MeshFace-${hit.tri}-${hash.toUInt().toString(16)}",
             triangleOrdinals = cluster.copyOf(),
             point = hit.p,
             normal = normal,
             planar = planar,
-            approximateArea = cluster.sumOf { tris[it].area.toDouble() }.toFloat(),
+            approximateArea = native?.area ?: cluster.sumOf { tris[it].area.toDouble() }.toFloat(),
             boundaryLoopCount = boundaryLoops.size,
             outerLoopCount = boundaryLoops.count { it.role == CadLoopRoleV29.OUTER },
-            innerLoopCount = boundaryLoops.count { it.role == CadLoopRoleV29.INNER }
+            innerLoopCount = boundaryLoops.count { it.role == CadLoopRoleV29.INNER },
+            nativeFaceId = nativeFaceId,
+            nativeRevision = nativeRevision
         )
     }
 
@@ -312,6 +345,15 @@ class CadBRepTopologyV27(private val mesh: NativeSceneMesh) {
     }
 
     private fun buildSurfaces(): Pair<IntArray, List<IntArray>> {
+        nativeFaceIdByTri?.let { mapping ->
+            val faceIds = mapping.distinct().sorted()
+            val groupIndex = faceIds.withIndex().associate { it.value to it.index }
+            val ids = IntArray(tris.size) { ordinal -> groupIndex.getValue(mapping[ordinal]) }
+            val groups = faceIds.map { faceId ->
+                mapping.indices.filter { mapping[it] == faceId }.toIntArray()
+            }
+            return ids to groups
+        }
         val ids = IntArray(tris.size) { -1 }
         val groups = arrayListOf<IntArray>()
         tris.indices.forEach { seed ->

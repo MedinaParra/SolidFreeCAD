@@ -73,7 +73,18 @@ internal suspend fun v24LoadExternal(context: android.content.Context, uri: Uri)
     val (file, name) = AndroidDocumentLoader.stage(context, uri, "solidfreecad-workbench-v24", fallback)
     val extension = v24Extension(context, uri, file, name)
     when (extension) {
-        "step", "stp" -> NativeStepBridge.importStep(file.absolutePath, name).let { V24Document(name, "STEP", it.mesh.v24Native(), it.summary, null, System.nanoTime(), true) }
+        "step", "stp" -> NativeStepBridge.openSession(file.absolutePath, name).let { session ->
+            V24Document(
+                name = name,
+                format = "STEP editable",
+                mesh = session.mesh.v24Native(),
+                summary = session.summary,
+                program = null,
+                token = System.nanoTime(),
+                fit = true,
+                stepSession = session
+            )
+        }
         "fcstd" -> { val archive = FreeCadArchiveReader.extract(file, File(context.cacheDir, "solidfreecad-fcstd-v24"), name); NativeFreeCadFileBridge.importFcStdObjects(archive.objects, name, archive.summary).let { V24Document(name, "FCStd", it.mesh.v24Native(), it.summary, null, System.nanoTime(), true) } }
         "fcmacro", "py" -> SolidFreeCadMacroRuntime.executeFile(context, file.readBytes(), 0.18, 0.24).let { V24Document(name, "FCMacro", it.mesh.v24Native(), "Macro FreeCAD ejecutada\n${it.pythonVersion}\n${it.documentSummary}\n${it.output}", null, System.nanoTime(), true) }
         else -> error("Formato no compatible: .$extension. Use STEP, FCStd o FCMacro")

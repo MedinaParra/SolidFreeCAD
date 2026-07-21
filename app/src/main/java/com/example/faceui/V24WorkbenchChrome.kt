@@ -93,14 +93,14 @@ internal fun V24TopBar(documentName: String, loading: Boolean, canUndo: Boolean,
 @Composable internal fun V24Action(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, enabled: Boolean, onClick: () -> Unit) {
     val gloveMode = LocalV24GloveMode.current
     Column(
-        Modifier.width(if (gloveMode) 78.dp else 62.dp)
-            .heightIn(min = if (gloveMode) 60.dp else 48.dp)
+        Modifier.width(if (gloveMode) 88.dp else 74.dp)
+            .heightIn(min = if (gloveMode) 64.dp else 52.dp)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = if (gloveMode) 7.dp else 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Icon(icon, label, tint = if (enabled) V24Accent else Color(0xFF94A3B8), modifier = Modifier.size(if (gloveMode) 27.dp else 20.dp))
-        Text(label, color = if (enabled) V24Text else Color(0xFF94A3B8), fontSize = if (gloveMode) 9.sp else 7.sp, fontWeight = FontWeight.Bold)
+        Icon(icon, label, tint = if (enabled) V24Accent else Color(0xFF94A3B8), modifier = Modifier.size(if (gloveMode) 29.dp else 24.dp))
+        Text(label, color = if (enabled) V24Text else Color(0xFF94A3B8), fontSize = if (gloveMode) 11.sp else 10.sp, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -110,8 +110,8 @@ internal fun V24Tree(program: BasicCadProgram?, selection: V24Selection, enabled
         Column {
             Row(Modifier.fillMaxWidth().background(V24Header).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("FeatureManager", Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 10.sp)
-                IconButton(onClick = onCreatePlane, enabled = enabled, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.GridOn, "Crear plano", tint = V24Accent) }
-                IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.KeyboardArrowLeft, "Ocultar", tint = V24Accent) }
+                IconButton(onClick = onCreatePlane, enabled = enabled, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.GridOn, "Crear plano", tint = V24Accent) }
+                IconButton(onClick = onClose, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.KeyboardArrowLeft, "Ocultar", tint = V24Accent) }
             }
             HorizontalDivider(color = V24Divider)
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(8.dp)) {
@@ -134,7 +134,7 @@ internal fun V24Tree(program: BasicCadProgram?, selection: V24Selection, enabled
 }
 
 @Composable internal fun V24TreeRow(text: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    Text(text, Modifier.fillMaxWidth().background(if (selected) V24Selected else Color.Transparent, RoundedCornerShape(4.dp)).clickable(enabled = enabled, onClick = onClick).padding(horizontal = 5.dp, vertical = 7.dp), color = V24Text, fontSize = 8.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+    Text(text, Modifier.fillMaxWidth().background(if (selected) V24Selected else Color.Transparent, RoundedCornerShape(4.dp)).clickable(enabled = enabled, onClick = onClick).heightIn(min = 48.dp).padding(horizontal = 8.dp, vertical = 10.dp), color = V24Text, fontSize = 11.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
 }
 
 @Composable
@@ -143,7 +143,7 @@ internal fun V24Properties(feature: BasicCadFeature?, plane: CadReferencePlane?,
         Column {
             Row(Modifier.fillMaxWidth().background(V24Header).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("PROPIEDADES", Modifier.weight(1f), fontWeight = FontWeight.Bold, fontSize = 10.sp)
-                IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.KeyboardArrowRight, "Ocultar", tint = V24Accent) }
+                IconButton(onClick = onClose, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.KeyboardArrowRight, "Ocultar", tint = V24Accent) }
             }
             HorizontalDivider(color = V24Divider)
             when {

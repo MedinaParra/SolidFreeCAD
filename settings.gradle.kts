@@ -143,11 +143,16 @@ object ProgressiveWorkbenchLoader {
 """
   )
 
-  replaceOnce("app/build.gradle.kts", "versionCode = 31", "versionCode = 35")
+  replaceOnce(
+    "app/build.gradle.kts",
+    "android.sourceSets.getByName(\"main\").java.srcDir(generatedV27Directory)",
+    "android.sourceSets.named(\"main\") {\n  kotlin.directories += generatedV27Directory\n}",
+  )
+  replaceOnce("app/build.gradle.kts", "versionCode = 31", "versionCode = 36")
   replaceOnce(
     "app/build.gradle.kts",
     "versionName = \"3.1.0-touch-workflows-a1\"",
-    "versionName = \"3.1.4-progressive-bootstrap-a1\"",
+    "versionName = \"3.1.5-generated-kotlin-source-fix-a1\"",
   )
 
   val manifest = root.resolve("app/src/main/AndroidManifest.xml")

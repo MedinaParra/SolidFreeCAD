@@ -79,7 +79,7 @@ class NativeLoadProbeActivity : Activity() {
 
     private fun loadLibrary(name: String) {
         stageFile().writeText("N_before_load_" + name)
-        runCatching { System.loadLibrary(name) }
+        runCatching { Runtime.getRuntime().loadLibrary(name) }
             .onSuccess {
                 stageFile().writeText("N_loaded_" + name)
                 reportFile().appendText("OK: " + name + "\n")

@@ -56,7 +56,7 @@ if (payloadDirectory.isDirectory) {
   fun replaceOnce(path: String, old: String, replacement: String) {
     val target = root.resolve(path)
     val source = target.readText()
-    check(old in source) { "Samsung diagnostic patch target missing in $path" }
+    check(old in source) { "Progressive bootstrap patch target missing in $path" }
     target.writeText(source.replaceFirst(old, replacement))
   }
 
@@ -80,8 +80,13 @@ if (payloadDirectory.isDirectory) {
   )
   replaceOnce(
     "app/src/main/v27gen/SolidFreeCadWorkbenchActivityV27.part1",
+    "@Composable\nprivate fun V27Workbench",
+    "@Composable\ninternal fun V27Workbench",
+  )
+  replaceOnce(
+    "app/src/main/v27gen/SolidFreeCadWorkbenchActivityV27.part1",
     "} else rebuild(history.reset(BasicCadProgram()), true, \"Pieza paramétrica creada\")",
-    "} else {\nstatus = \"Inicio seguro activo · use Nuevo o Abrir para cargar el núcleo CAD\"\n}",
+    "} else {\nstatus = \"Entorno CAD listo · use Nuevo o Abrir para cargar un modelo\"\n}",
   )
   replaceOnce(
     "app/src/main/v27gen/SolidFreeCadWorkbenchActivityV27.part1",
@@ -90,25 +95,20 @@ if (payloadDirectory.isDirectory) {
   )
   replaceOnce(
     "app/src/main/v27gen/SolidFreeCadWorkbenchActivityV27.part1",
-    "override fun onCreate(savedInstanceState: Bundle?) {\nsuper.onCreate(savedInstanceState)\nenableEdgeToEdge()\nval initialUri = intent?.data\nsetContent { MyApplicationTheme { V27Workbench(initialUri) { cadSurface = it } } }\n}",
-    "override fun onCreate(savedInstanceState: Bundle?) {\nrunCatching { filesDir.resolve(\"cadengine-stage.txt\").writeText(\"W1_workbench_onCreate_enter\") }\nsuper.onCreate(savedInstanceState)\nrunCatching { filesDir.resolve(\"cadengine-stage.txt\").writeText(\"W2_workbench_after_super\") }\nenableEdgeToEdge()\nval initialUri = intent?.data\nrunCatching { filesDir.resolve(\"cadengine-stage.txt\").writeText(\"W3_before_setContent\") }\nsetContent { MyApplicationTheme { V27Workbench(initialUri) { cadSurface = it } } }\nrunCatching { filesDir.resolve(\"cadengine-stage.txt\").writeText(\"W4_after_setContent\") }\n}",
-  )
-  replaceOnce(
-    "app/src/main/v27gen/SolidFreeCadWorkbenchActivityV27.part1",
     "factory = { androidContext -> FaceDrivenCadSurfaceViewV27(androidContext).also { surface=it; onSurfaceReady(it) } },",
-    "factory = { androidContext ->\nrunCatching { androidContext.filesDir.resolve(\"cadengine-stage.txt\").writeText(\"W5_before_cad_glsurface\") }\nFaceDrivenCadSurfaceViewV27(androidContext).also {\nrunCatching { androidContext.filesDir.resolve(\"cadengine-stage.txt\").writeText(\"W6_cad_glsurface_created\") }\nsurface=it; onSurfaceReady(it)\n}\n},",
+    "factory = { androidContext ->\nrunCatching { androidContext.filesDir.resolve(\"progressive-stage.txt\").writeText(\"L3_before_cad_surface\") }\nFaceDrivenCadSurfaceViewV27(androidContext).also {\nrunCatching { androidContext.filesDir.resolve(\"progressive-stage.txt\").writeText(\"L4_cad_surface_ready\") }\nsurface=it; onSurfaceReady(it)\n}\n},",
   )
   replaceOnce(
     "app/src/main/java/com/example/faceui/FaceDrivenCadSurfaceViewV27.kt",
     "init {\n        setEGLContextClientVersion(2)\n        preserveEGLContextOnPause = true\n        setRenderer(cadRenderer)\n        renderMode = RENDERMODE_WHEN_DIRTY\n    }",
-    "init {\n        runCatching { context.filesDir.resolve(\"cadengine-stage.txt\").writeText(\"W5a_cad_glsurface_init\") }\n        setEGLContextClientVersion(2)\n        preserveEGLContextOnPause = true\n        setRenderer(cadRenderer)\n        renderMode = RENDERMODE_WHEN_DIRTY\n        runCatching { context.filesDir.resolve(\"cadengine-stage.txt\").writeText(\"W5b_cad_renderer_attached\") }\n    }",
+    "init {\n        runCatching { context.filesDir.resolve(\"progressive-stage.txt\").writeText(\"L3a_surface_init\") }\n        setEGLContextClientVersion(2)\n        preserveEGLContextOnPause = true\n        setRenderer(cadRenderer)\n        renderMode = RENDERMODE_WHEN_DIRTY\n        runCatching { context.filesDir.resolve(\"progressive-stage.txt\").writeText(\"L3b_renderer_attached\") }\n    }",
   )
 
-  replaceOnce("app/build.gradle.kts", "versionCode = 31", "versionCode = 34")
+  replaceOnce("app/build.gradle.kts", "versionCode = 31", "versionCode = 35")
   replaceOnce(
     "app/build.gradle.kts",
     "versionName = \"3.1.0-touch-workflows-a1\"",
-    "versionName = \"3.1.3-samsung-staged-diagnostics-a1\"",
+    "versionName = \"3.1.4-progressive-bootstrap-a1\"",
   )
 
   val manifest = root.resolve("app/src/main/AndroidManifest.xml")
@@ -131,7 +131,7 @@ if (payloadDirectory.isDirectory) {
   val previewActivity = """        <activity
             android:name="com.example.faceui.SolidFreeCadUiPreviewActivity"
 """
-  val diagnosticActivities = """        <activity
+  val productActivities = """        <activity
             android:name="com.example.faceui.SafeLauncherActivity"
             android:exported="true"
             android:label="@string/app_name"
@@ -142,6 +142,12 @@ if (payloadDirectory.isDirectory) {
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name="com.example.faceui.ProgressiveCadActivity"
+            android:exported="false"
+            android:process=":cadengine"
+            android:screenOrientation="fullSensor"
+            android:theme="@style/Theme.MyApplication" />
         <activity
             android:name="com.example.faceui.CadEngineProbeActivity"
             android:exported="false"
@@ -164,7 +170,7 @@ if (payloadDirectory.isDirectory) {
             android:name="com.example.faceui.SolidFreeCadUiPreviewActivity"
 """
   check(previewActivity in manifestSource) { "Preview activity declaration missing" }
-  manifestSource = manifestSource.replaceFirst(previewActivity, diagnosticActivities)
+  manifestSource = manifestSource.replaceFirst(previewActivity, productActivities)
 
   val workbenchActivity = """        <activity
             android:name="com.example.faceui.SolidFreeCadWorkbenchActivityV27"
@@ -172,7 +178,7 @@ if (payloadDirectory.isDirectory) {
 """
   val isolatedWorkbench = """        <activity
             android:name="com.example.faceui.SolidFreeCadWorkbenchActivityV27"
-            android:exported="true"
+            android:exported="false"
             android:process=":cadengine"
 """
   check(workbenchActivity in manifestSource) { "Workbench declaration missing" }

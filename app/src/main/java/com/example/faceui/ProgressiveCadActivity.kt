@@ -17,6 +17,7 @@ import java.lang.reflect.InvocationTargetException
 class ProgressiveCadActivity : ComponentActivity() {
     private lateinit var statusText: TextView
     private var workbenchInstalled = false
+    private var installingWorkbench = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         stage("P1_progressive_onCreate_enter")
@@ -24,6 +25,10 @@ class ProgressiveCadActivity : ComponentActivity() {
         stage("P2_progressive_after_super")
         showBootstrap()
         stage("P3_progressive_bootstrap_visible")
+
+        if (savedInstanceState == null && intent.getBooleanExtra(EXTRA_AUTO_INSTALL, true)) {
+            window.decorView.postDelayed({ installWorkbench() }, AUTO_INSTALL_DELAY_MS)
+        }
     }
 
     override fun onResume() {
@@ -43,30 +48,35 @@ class ProgressiveCadActivity : ComponentActivity() {
 
     private fun showBootstrap(error: Throwable? = null) {
         workbenchInstalled = false
+        installingWorkbench = false
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
 
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(24), dp(34), dp(24), dp(28))
+            setPadding(dp(24), dp(36), dp(24), dp(28))
             setBackgroundColor(Color.rgb(238, 243, 247))
         }
         column.addView(TextView(this).apply {
-            text = "SolidFreeCAD 3.1.4"
+            text = "SolidFreeCAD 3.1.6"
             textSize = 28f
             setTextColor(Color.rgb(24, 34, 44))
             gravity = Gravity.CENTER
         }, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         column.addView(TextView(this).apply {
-            text = "Carga progresiva del entorno CAD"
+            text = if (error == null) "Preparando entorno CAD" else "Modo seguro del entorno CAD"
             textSize = 16f
             setTextColor(Color.rgb(74, 88, 102))
             gravity = Gravity.CENTER
             setPadding(0, dp(8), 0, dp(20))
         })
         column.addView(TextView(this).apply {
-            text = "El visor, el árbol, las herramientas STEP y el motor nativo se cargan después de que esta pantalla ya está activa. Así Android 16 puede mostrar el error sin cerrar toda la aplicación."
+            text = if (error == null) {
+                "El árbol, el visor OpenGL y las herramientas STEP se cargarán sobre esta pantalla protegida."
+            } else {
+                "El entorno completo no pudo terminar de cargar. La aplicación permanece abierta para copiar el diagnóstico o volver a intentarlo."
+            }
             textSize = 15f
             setTextColor(Color.rgb(28, 40, 52))
             setPadding(dp(16), dp(16), dp(16), dp(16))
@@ -76,7 +86,7 @@ class ProgressiveCadActivity : ComponentActivity() {
         })
 
         column.addView(Button(this).apply {
-            text = "Abrir entorno CAD completo"
+            text = if (error == null) "Abrir entorno CAD" else "Reintentar carga CAD"
             textSize = 16f
             setOnClickListener { installWorkbench() }
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(60)).apply { bottomMargin = dp(12) })
@@ -104,6 +114,8 @@ class ProgressiveCadActivity : ComponentActivity() {
     }
 
     private fun installWorkbench() {
+        if (installingWorkbench || workbenchInstalled || isFinishing) return
+        installingWorkbench = true
         stage("P4_before_loader_class")
         statusText.text = "Cargando árbol, visor y herramientas…"
         runCatching {
@@ -113,7 +125,14 @@ class ProgressiveCadActivity : ComponentActivity() {
             stage("P6_before_loader_install")
             install.invoke(null, this)
             workbenchInstalled = true
+            installingWorkbench = false
             stage("P7_loader_install_returned")
+            window.decorView.postDelayed({
+                if (workbenchInstalled && !isFinishing) {
+                    reportFile().delete()
+                    stage("PRODUCT_READY")
+                }
+            }, PRODUCT_READY_DELAY_MS)
         }.onFailure { failure ->
             val root = if (failure is InvocationTargetException) failure.targetException ?: failure else failure
             reportFile().writeText(root.stackTraceToString())
@@ -142,10 +161,17 @@ class ProgressiveCadActivity : ComponentActivity() {
         val stage = runCatching { stageFile().readText() }.getOrDefault("sin etapa")
         val persisted = runCatching { reportFile().readText() }.getOrDefault("sin error registrado")
         return buildString {
-            appendLine("Modo: carga progresiva")
+            appendLine("Modo: carga progresiva 3.1.6")
             appendLine("Etapa: " + stage)
+            appendLine("Archivo solicitado: " + (intent.data?.toString() ?: "ninguno"))
             appendLine("Error actual: " + (error?.let { it.javaClass.name + ": " + (it.message ?: "sin mensaje") } ?: "ninguno"))
             appendLine("Registro: " + persisted)
         }.trim()
+    }
+
+    companion object {
+        const val EXTRA_AUTO_INSTALL = "solidfreecad.auto_install_workbench"
+        private const val AUTO_INSTALL_DELAY_MS = 180L
+        private const val PRODUCT_READY_DELAY_MS = 1_200L
     }
 }

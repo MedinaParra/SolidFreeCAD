@@ -35,22 +35,29 @@ class SafeLauncherActivity : Activity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(24), dp(28), dp(24), dp(28))
+            setPadding(dp(24), dp(30), dp(24), dp(28))
             setBackgroundColor(Color.rgb(238, 243, 247))
         }
         root.addView(TextView(this).apply {
-            text = "SolidFreeCAD 3.1.3"
-            textSize = 26f
+            text = "SolidFreeCAD 3.1.4"
+            textSize = 28f
             setTextColor(Color.rgb(25, 35, 45))
             gravity = Gravity.CENTER
         }, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(TextView(this).apply {
-            text = "Diagnóstico escalonado · Samsung A26 5G"
+            text = "CAD táctil con FreeCAD y OpenCASCADE"
             textSize = 16f
             setTextColor(Color.rgb(70, 85, 100))
             gravity = Gravity.CENTER
             setPadding(0, dp(8), 0, dp(20))
         })
+        root.addView(TextView(this).apply {
+            text = "El desarrollo 3.1 permanece completo. Esta versión inicia el entorno en forma progresiva para evitar el cierre temprano detectado en Android 16."
+            textSize = 15f
+            setTextColor(Color.rgb(25, 35, 45))
+            setPadding(dp(16), dp(16), dp(16), dp(16))
+            setBackgroundColor(Color.WHITE)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(16) })
 
         fun action(label: String, click: () -> Unit) {
             root.addView(Button(this).apply {
@@ -60,18 +67,22 @@ class SafeLauncherActivity : Activity() {
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)).apply { bottomMargin = dp(10) })
         }
 
-        action("1 · Interfaz Compose sin OpenGL/JNI") {
+        action("Abrir SolidFreeCAD") {
+            progressiveStageFile().writeText("0_launcher_requested_progressive")
+            startActivity(Intent().setClassName(packageName, "com.example.faceui.ProgressiveCadActivity"))
+        }
+        action("Vista previa de interfaz") {
             startActivity(Intent().setClassName(packageName, "com.example.faceui.SolidFreeCadUiPreviewActivity"))
         }
-        action("2 · Abrir proceso CAD de diagnóstico") {
+        action("Diagnóstico de GPU y proceso CAD") {
             stageFile().writeText("0_launcher_requested_probe")
             startActivity(Intent().setClassName(packageName, "com.example.faceui.CadEngineProbeActivity"))
         }
-        action("3 · Probar carga nativa aislada") {
+        action("Diagnóstico de librerías nativas") {
             nativeStageFile().writeText("N0_launcher_requested_nativeprobe")
             startActivity(Intent().setClassName(packageName, "com.example.faceui.NativeLoadProbeActivity"))
         }
-        action("Actualizar diagnóstico") { refreshStage() }
+        action("Actualizar estado") { refreshStage() }
         action("Copiar diagnóstico") {
             val report = diagnosticReport()
             (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager)
@@ -93,6 +104,8 @@ class SafeLauncherActivity : Activity() {
     private fun reportFile(): File = File(filesDir, "cadengine-report.txt")
     private fun nativeStageFile(): File = File(filesDir, "nativeprobe-stage.txt")
     private fun nativeReportFile(): File = File(filesDir, "nativeprobe-report.txt")
+    private fun progressiveStageFile(): File = File(filesDir, "progressive-stage.txt")
+    private fun progressiveReportFile(): File = File(filesDir, "progressive-report.txt")
 
     private fun writeFailure(source: String, failure: Throwable) {
         val text = source + ": " + failure.javaClass.name + ": " + (failure.message ?: "sin mensaje")
@@ -107,7 +120,9 @@ class SafeLauncherActivity : Activity() {
     private fun diagnosticReport(): String {
         fun read(file: File, fallback: String): String = runCatching { file.takeIf(File::isFile)?.readText() }.getOrNull() ?: fallback
         return buildString {
-            appendLine("Estado Android: lanzador seguro activo")
+            appendLine("Estado Android: lanzador SolidFreeCAD activo")
+            appendLine("Carga progresiva: " + read(progressiveStageFile(), "sin intento"))
+            appendLine("Informe progresivo: " + read(progressiveReportFile(), "sin informe"))
             appendLine("Última etapa CAD: " + read(stageFile(), "sin intento CAD"))
             appendLine("Informe CAD: " + read(reportFile(), "sin informe"))
             appendLine("Última etapa nativa: " + read(nativeStageFile(), "sin intento nativo"))

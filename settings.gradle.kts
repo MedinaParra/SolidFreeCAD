@@ -148,11 +148,11 @@ object ProgressiveWorkbenchLoader {
     "android.sourceSets.getByName(\"main\").java.srcDir(generatedV27Directory)",
     "android.sourceSets.named(\"main\") {\n  kotlin.directories += generatedV27Directory.path\n}",
   )
-  replaceOnce("app/build.gradle.kts", "versionCode = 31", "versionCode = 36")
+  replaceOnce("app/build.gradle.kts", "versionCode = 31", "versionCode = 37")
   replaceOnce(
     "app/build.gradle.kts",
     "versionName = \"3.1.0-touch-workflows-a1\"",
-    "versionName = \"3.1.5-generated-kotlin-source-fix-a1\"",
+    "versionName = \"3.1.6-product-startup-a1\"",
   )
 
   val manifest = root.resolve("app/src/main/AndroidManifest.xml")
@@ -179,11 +179,40 @@ object ProgressiveWorkbenchLoader {
             android:name="com.example.faceui.SafeLauncherActivity"
             android:exported="true"
             android:label="@string/app_name"
+            android:launchMode="singleTop"
             android:screenOrientation="unspecified"
             android:theme="@style/Theme.MyApplication">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/x-freecad-document" />
+                <data android:mimeType="application/x-freecad-macro" />
+                <data android:mimeType="application/x-extension-fcmacro" />
+                <data android:mimeType="application/step" />
+                <data android:mimeType="application/stp" />
+                <data android:mimeType="application/x-step" />
+                <data android:mimeType="text/x-python" />
+                <data android:mimeType="application/x-python-code" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.FCMacro" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.fcmacro" />
+                <data android:scheme="file" android:mimeType="*/*" android:pathPattern=".*\.FCMacro" />
+                <data android:scheme="file" android:mimeType="*/*" android:pathPattern=".*\.fcmacro" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.FCStd" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.fcstd" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.step" />
+                <data android:scheme="content" android:mimeType="*/*" android:pathPattern=".*\.stp" />
             </intent-filter>
         </activity>
         <activity

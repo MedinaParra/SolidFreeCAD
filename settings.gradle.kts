@@ -146,7 +146,7 @@ object ProgressiveWorkbenchLoader {
   replaceOnce(
     "app/build.gradle.kts",
     "android.sourceSets.getByName(\"main\").java.srcDir(generatedV27Directory)",
-    "android.sourceSets.named(\"main\") {\n  kotlin.directories += generatedV27Directory\n}",
+    "android.sourceSets.named(\"main\") {\n  kotlin.directories += generatedV27Directory.path\n}",
   )
   replaceOnce("app/build.gradle.kts", "versionCode = 31", "versionCode = 36")
   replaceOnce(

@@ -11,13 +11,16 @@ class ProductStartupPolicyTest {
     }
 
     @Test
-    fun successfulWorkbenchAutoOpensAgain() {
+    fun successfulRendererAutoOpensAgain() {
         assertTrue(ProductStartupPolicy.shouldAutoOpen("L4_surface_ready", forceSafeMode = false))
+        assertTrue(ProductStartupPolicy.shouldAutoOpen("PRODUCT_READY", forceSafeMode = false))
     }
 
     @Test
     fun interruptedLoaderFallsBackToSafeLauncher() {
         assertFalse(ProductStartupPolicy.shouldAutoOpen("P6_before_loader_install", forceSafeMode = false))
+        assertFalse(ProductStartupPolicy.shouldAutoOpen("P7_loader_install_returned", forceSafeMode = false))
+        assertFalse(ProductStartupPolicy.shouldAutoOpen("L3b_renderer_attached", forceSafeMode = false))
     }
 
     @Test

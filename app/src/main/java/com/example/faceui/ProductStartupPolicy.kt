@@ -13,7 +13,7 @@ object ProductStartupPolicy {
         "P7_",
         "L1_",
         "L2_",
-        "L3_",
+        "L3",
         "P_FAIL_",
     )
 

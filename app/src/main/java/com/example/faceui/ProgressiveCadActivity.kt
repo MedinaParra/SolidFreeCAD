@@ -16,6 +16,7 @@ import java.lang.reflect.InvocationTargetException
 
 class ProgressiveCadActivity : ComponentActivity() {
     private lateinit var statusText: TextView
+    private var workbenchInstalled = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         stage("P1_progressive_onCreate_enter")
@@ -25,7 +26,23 @@ class ProgressiveCadActivity : ComponentActivity() {
         stage("P3_progressive_bootstrap_visible")
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (workbenchInstalled) invokeLoaderLifecycle("resumeSurface")
+    }
+
+    override fun onPause() {
+        if (workbenchInstalled) invokeLoaderLifecycle("pauseSurface")
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        if (workbenchInstalled) invokeLoaderLifecycle("releaseSurface")
+        super.onDestroy()
+    }
+
     private fun showBootstrap(error: Throwable? = null) {
+        workbenchInstalled = false
         val density = resources.displayMetrics.density
         fun dp(value: Int) = (value * density).toInt()
 
@@ -95,12 +112,22 @@ class ProgressiveCadActivity : ComponentActivity() {
             val install = loaderType.getMethod("install", ComponentActivity::class.java)
             stage("P6_before_loader_install")
             install.invoke(null, this)
+            workbenchInstalled = true
             stage("P7_loader_install_returned")
         }.onFailure { failure ->
             val root = if (failure is InvocationTargetException) failure.targetException ?: failure else failure
             reportFile().writeText(root.stackTraceToString())
             stage("P_FAIL_" + root.javaClass.simpleName)
             showBootstrap(root)
+        }
+    }
+
+    private fun invokeLoaderLifecycle(methodName: String) {
+        runCatching {
+            val loaderType = Class.forName("com.example.faceui.ProgressiveWorkbenchLoader", false, classLoader)
+            loaderType.getMethod(methodName).invoke(null)
+        }.onFailure { failure ->
+            reportFile().writeText("Lifecycle " + methodName + "\n" + failure.stackTraceToString())
         }
     }
 

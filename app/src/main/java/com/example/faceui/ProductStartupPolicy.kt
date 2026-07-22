@@ -3,7 +3,6 @@ package com.example.faceui
 object ProductStartupPolicy {
     private val healthyPrefixes = listOf(
         "L4_surface_ready",
-        "P7_loader_install_returned",
         "PRODUCT_READY",
     )
 
@@ -11,6 +10,7 @@ object ProductStartupPolicy {
         "P4_",
         "P5_",
         "P6_",
+        "P7_",
         "L1_",
         "L2_",
         "L3_",

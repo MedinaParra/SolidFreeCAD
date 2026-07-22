@@ -48,8 +48,18 @@ class SafeLauncherActivity : Activity() {
         }
     }
 
+    override fun onNewIntent(newIntent: Intent) {
+        super.onNewIntent(newIntent)
+        setIntent(newIntent)
+        launchDispatched = false
+        val uri = newIntent.data ?: return
+        launchStatus.text = "Preparando archivo en SolidFreeCAD…"
+        openProduct(uri, newIntent.type, autoInstall = true, sourceIntent = newIntent)
+    }
+
     override fun onResume() {
         super.onResume()
+        launchDispatched = false
         if (::stageText.isInitialized) refreshStage()
     }
 
@@ -121,7 +131,10 @@ class SafeLauncherActivity : Activity() {
                         "application/step",
                         "application/stp",
                         "application/x-step",
+                        "application/x-freecad-document",
+                        "application/x-freecad-macro",
                         "application/octet-stream",
+                        "text/x-python",
                         "text/plain",
                     ),
                 )

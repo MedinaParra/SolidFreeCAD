@@ -69,8 +69,8 @@ internal fun V24BottomTray(tab: V24TrayTab, program: BasicCadProgram?, enabled: 
     Surface(Modifier.fillMaxWidth(0.92f).heightIn(min = 126.dp, max = 185.dp), color = V24Panel, contentColor = V24Text, shape = RoundedCornerShape(12.dp), shadowElevation = 10.dp) {
         Column {
             Row(Modifier.fillMaxWidth().background(V24Header).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                V24TrayTab.entries.forEach { item -> Text(item.label, Modifier.clickable { onTab(item) }.background(if (item == tab) Color.White else Color.Transparent, RoundedCornerShape(5.dp)).padding(horizontal = 10.dp, vertical = 7.dp), color = if (item == tab) V24Accent else V24Secondary, fontSize = 8.sp, fontWeight = FontWeight.Bold) }
-                Spacer(Modifier.weight(1f)); IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.KeyboardArrowDown, "Ocultar") }
+                V24TrayTab.entries.forEach { item -> Text(item.label, Modifier.clickable { onTab(item) }.background(if (item == tab) Color.White else Color.Transparent, RoundedCornerShape(5.dp)).heightIn(min = 48.dp).padding(horizontal = 13.dp, vertical = 12.dp), color = if (item == tab) V24Accent else V24Secondary, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                Spacer(Modifier.weight(1f)); IconButton(onClick = onClose, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.KeyboardArrowDown, "Ocultar") }
             }
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(9.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 when (tab) {
@@ -101,7 +101,7 @@ internal fun v24OperationsFor(tab: V24TrayTab): List<BasicCadOperation> = when (
 @Composable internal fun V24Tile(title: String, subtitle: String, enabled: Boolean, onClick: () -> Unit) {
     val gloveMode = LocalV24GloveMode.current
     Surface(Modifier.width(if (gloveMode) 156.dp else 132.dp).height(if (gloveMode) 98.dp else 82.dp).clickable(enabled = enabled, onClick = onClick), color = if (enabled) Color(0xFFEDF3F7) else Color(0xFFE2E8F0), shape = RoundedCornerShape(8.dp), shadowElevation = 1.dp) {
-        Column(Modifier.padding(9.dp), verticalArrangement = Arrangement.Center) { Text(title, color = if (enabled) V24Text else Color(0xFF94A3B8), fontWeight = FontWeight.Bold, fontSize = 9.sp, maxLines = 2); Spacer(Modifier.height(4.dp)); Text(subtitle, color = if (enabled) V24Secondary else Color(0xFF94A3B8), fontSize = 7.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+        Column(Modifier.padding(9.dp), verticalArrangement = Arrangement.Center) { Text(title, color = if (enabled) V24Text else Color(0xFF94A3B8), fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 2); Spacer(Modifier.height(4.dp)); Text(subtitle, color = if (enabled) V24Secondary else Color(0xFF94A3B8), fontSize = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis) }
     }
 }
 

@@ -18,11 +18,11 @@ concurrency:
 env:
   SOLIDFREECAD_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
   SOLIDFREECAD_SOURCE_BRANCH: ${{ github.head_ref || github.ref_name }}
-  FREECAD_BASE_RUNTIME_RUN: 29699041993
+  FREECAD_BASE_RUNTIME_RUN: 29859184724
   FREECAD_BASE_RUNTIME_ARTIFACT: freecad-android-base-runtime-v0110-apk
   FREECAD_FILES_RUNTIME_RUN: 29699041982
   FREECAD_FILES_RUNTIME_ARTIFACT: freecad-android-fcmacro-fcstd-apk
-  FREECAD_BASE_RUNTIME_COMMIT: 1f70422ebaf60861971086709352d50716304625
+  FREECAD_BASE_RUNTIME_COMMIT: eb0e10de251f9e4ed6c94dc18a0e620e767946da
   FREECAD_FILES_RUNTIME_COMMIT: 1f70422ebaf60861971086709352d50716304625
 
 jobs:
@@ -48,7 +48,7 @@ jobs:
           ! grep -R --include='*.kt' -n 'freecad_native' app/src/main/java
           test "$(grep -c 'android.intent.category.LAUNCHER' app/src/main/AndroidManifest.xml)" -eq 1
           grep -q 'SolidFreeCadWorkbenchActivityV27' app/src/main/AndroidManifest.xml
-          grep -q 'versionName = "2.8.0-stabilization-a1"' app/build.gradle.kts
+          grep -q 'versionName = "3.0.0-step-session-a1"' app/build.gradle.kts
           test -s NATIVE_RUNTIME_PROVENANCE.md
           test -s third_party/licenses/OCCT-NOTICE.txt
           test -s third_party/licenses/THIRD-PARTY-NOTICES.txt
@@ -152,6 +152,12 @@ jobs:
               | grep -q 'Java_com_medinaparra_freecadandroid_nativebridge_NativeCadBridge_nativeRunMacro'
             nm -D --defined-only "${BASE_CORE}" \
               | grep -q 'Java_com_medinaparra_freecadandroid_nativebridge_NativeStepBridge_nativeImportStep'
+            for SYMBOL in \
+              nativeOpenStepSession nativePreviewPull nativeCommitStepSession \
+              nativeRollbackStepSession nativeSaveStepSession nativeCloseStepSession; do
+              nm -D --defined-only "${BASE_CORE}" \
+                | grep -q "Java_com_medinaparra_freecadandroid_nativebridge_NativeStepBridge_${SYMBOL}"
+            done
             nm -D --defined-only "${FILES_CORE}" \
               | grep -q 'Java_com_medinaparra_freecadandroid_nativebridge_NativeFreeCadFileBridge_nativeImportBrepFiles'
             nm -D --defined-only "${FILES_CORE}" \
@@ -202,7 +208,7 @@ jobs:
           FreeCAD-Native FCStd artifact=${FREECAD_FILES_RUNTIME_ARTIFACT}
           FreeCAD-Native FCStd APK sha256=${FILES_APK_SHA256}
           FreeCAD source version=1.1.1
-          FreeCAD Base runtime=0.11.0
+          FreeCAD Base runtime=0.12.0-step-session
           OpenCASCADE version=7.9.2
           CPython version=3.14.6
           ABI=armeabi-v7a,arm64-v8a
@@ -226,6 +232,7 @@ jobs:
           for CONTRACT in \
             CameraNavigationTest CadSketchConstraintTest BasicCadMacroGeneratorTest \
             MultiEntitySketchMacroTest CadBRepTopologyV27Test CadBRepSelectionTest \
+            CadAdaptiveWorkbenchV30Test CadSelectionLadderV30Test NativeStepSessionPayloadTest \
             StepPreviewParserTest FreeCadArchiveRoundTripTest; do
             grep -q "${CONTRACT}" unit-test-suites.txt
           done
@@ -253,9 +260,9 @@ jobs:
           done
           grep -q 'assets/runtime-provenance.txt' apk-contents.txt
           sha256sum "${APK}" | tee app-debug.apk.sha256
-          cp "${APK}" "SolidFreeCAD-v2.8.0-stabilization-a1-universal.apk"
-          sha256sum SolidFreeCAD-v2.8.0-stabilization-a1-universal.apk \
-            | tee SolidFreeCAD-v2.8.0-stabilization-a1-universal.apk.sha256
+          cp "${APK}" "SolidFreeCAD-v3.0.0-step-session-a1-universal.apk"
+          sha256sum SolidFreeCAD-v3.0.0-step-session-a1-universal.apk \
+            | tee SolidFreeCAD-v3.0.0-step-session-a1-universal.apk.sha256
 
       - name: Package complete source project
         if: steps.gradle-build.outcome == 'success'
@@ -266,10 +273,10 @@ jobs:
           git archive --format=zip --prefix=SolidFreeCAD-source/ \
             --output="project-archive/SolidFreeCAD-source-${SOLIDFREECAD_SOURCE_COMMIT}.zip" HEAD
           cp "$(find .deps/freecad-base-runtime -type f -name '*.apk' | head -n 1)" \
-            project-archive/FreeCAD-Android-Base-Runtime-v0.11.0.apk
+            project-archive/FreeCAD-Android-Base-Runtime-v0.12.0-step-session.apk
           cp "$(find .deps/freecad-files-runtime -type f -name '*.apk' | head -n 1)" \
             project-archive/FreeCAD-Android-FCStd-Bridge.apk
-          cp SolidFreeCAD-v2.8.0-stabilization-a1-universal.apk* project-archive/
+          cp SolidFreeCAD-v3.0.0-step-session-a1-universal.apk* project-archive/
           cp NATIVE_RUNTIME_PROVENANCE.md build.log apk-contents.txt app-debug.apk.sha256 \
             elf-closure.txt unit-test-suites.txt project-archive/
           cp app/src/main/assets/runtime-provenance.txt project-archive/
@@ -292,7 +299,7 @@ jobs:
             build.log
             apk-contents.txt
             app-debug.apk.sha256
-            SolidFreeCAD-v2.8.0-stabilization-a1-universal.apk.sha256
+            SolidFreeCAD-v3.0.0-step-session-a1-universal.apk.sha256
             elf-closure.txt
             unit-test-suites.txt
             app/src/main/assets/runtime-provenance.txt
@@ -302,10 +309,10 @@ jobs:
         if: steps.gradle-build.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
-          name: SolidFreeCAD-v2.8.0-stabilization-a1-universal
+          name: SolidFreeCAD-v3.0.0-step-session-a1-universal
           path: |
-            SolidFreeCAD-v2.8.0-stabilization-a1-universal.apk
-            SolidFreeCAD-v2.8.0-stabilization-a1-universal.apk.sha256
+            SolidFreeCAD-v3.0.0-step-session-a1-universal.apk
+            SolidFreeCAD-v3.0.0-step-session-a1-universal.apk.sha256
           if-no-files-found: error
 
       - name: Upload complete project bundle

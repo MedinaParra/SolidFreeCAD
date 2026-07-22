@@ -104,6 +104,45 @@ if (payloadDirectory.isDirectory) {
     "init {\n        runCatching { context.filesDir.resolve(\"progressive-stage.txt\").writeText(\"L3a_surface_init\") }\n        setEGLContextClientVersion(2)\n        preserveEGLContextOnPause = true\n        setRenderer(cadRenderer)\n        renderMode = RENDERMODE_WHEN_DIRTY\n        runCatching { context.filesDir.resolve(\"progressive-stage.txt\").writeText(\"L3b_renderer_attached\") }\n    }",
   )
 
+  val generatedPart2 = root.resolve("app/src/main/v27gen/SolidFreeCadWorkbenchActivityV27.part2")
+  generatedPart2.appendText(
+    """
+
+object ProgressiveWorkbenchLoader {
+    private var activeSurface: FaceDrivenCadSurfaceViewV27? = null
+
+    @JvmStatic
+    fun install(activity: ComponentActivity) {
+        runCatching { activity.filesDir.resolve("progressive-stage.txt").writeText("L1_loader_install_enter") }
+        activity.setContent {
+            MyApplicationTheme {
+                V27Workbench(activity.intent?.data) { surface ->
+                    activeSurface = surface
+                    runCatching { activity.filesDir.resolve("progressive-stage.txt").writeText("L4_surface_ready") }
+                }
+            }
+        }
+        runCatching { activity.filesDir.resolve("progressive-stage.txt").writeText("L2_setContent_returned") }
+    }
+
+    @JvmStatic
+    fun resumeSurface() {
+        activeSurface?.onResume()
+    }
+
+    @JvmStatic
+    fun pauseSurface() {
+        activeSurface?.onPause()
+    }
+
+    @JvmStatic
+    fun releaseSurface() {
+        activeSurface = null
+    }
+}
+"""
+  )
+
   replaceOnce("app/build.gradle.kts", "versionCode = 31", "versionCode = 35")
   replaceOnce(
     "app/build.gradle.kts",
